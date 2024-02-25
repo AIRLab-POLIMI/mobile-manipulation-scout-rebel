@@ -45,3 +45,24 @@ This repository contains the code for some mobile manipulation tasks and demos u
 * Ouster OS1: 3D lidar for environment perception and mapping with 64 lasers and 360° field of view
 * Intel NUC: onboard computer for processing and control
 
+## Packages description
+
+This repository contains the following packages:
+1. `client_demos`: action clients for interacting with the robot and the environment in the context of mobile manipulation tasks
+2. `moveit2_servers`: action servers for motion planning and autonomous control of the robot arm
+3. `nav2_servers`: action servers for autonomous navigation and environment perception
+4. `multi_aruco_plane_detection`: source code for correcting the position and orientation estimates of multiple coplanar
+ aruco markers using data analysis and filtering techniques, robust to noise and outliers
+5. `mobile_manipulation_interfaces`: custom actions and messages interfaces for mobile manipulation tasks
+
+## 1. Button Presser Demo
+
+The button presser demo consists in performing a combination of autonomous navigation with the mobile robot
+and autonomous arm planning and control to press a series of buttons in a sequence. The tasks are:
+
+1. Find in the surrounding environment the box with the buttons to press.
+2. Position the robot arm in such a way not to occlude the 3d lidar
+3. Autonomous navigation to the box location
+4. The robot parks itself in front of the box, in a way to leave enough space for the arm to reach the buttons
+5. The robot arm searches nearby the box for the buttons to obtain a precise position of the buttons
+6. The robot arm presses the buttons in a sequence
