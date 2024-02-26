@@ -34,13 +34,13 @@ private:
 	std::string camera_frame_name;
 
 	const std::string viz_markers_topic = "/viz_markers"; // topic for visualization of the computed plane in RViz
-	const std::string aruco_markers_topic = "/aruco/markers/small"; // topic for the detected aruco markers
+	const std::string aruco_markers_topic = "/aruco/markers"; // topic for the detected aruco markers
 	const std::string corrected_aruco_markers_topic = "/aruco/markers/corrected"; // topic for the corrected aruco markers
 
 	// logger
 	rclcpp::Logger LOGGER = rclcpp::get_logger("multi_aruco");
 
-	const bool enable_visualization = false; // enable visualization of the computed plane in RViz
+	const bool enable_visualization = true; // enable visualization of the computed plane in RViz
 
 public:
 	/**

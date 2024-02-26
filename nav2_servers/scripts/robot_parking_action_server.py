@@ -90,7 +90,7 @@ class RobotParkingActionServer(Node):
         # Wait for navigation to fully activate, since autostarting nav2
         self.parking_node.navigator.waitUntilNav2Active(localizer="robot_localization")
 
-        global_costmap = self.parking_node.navigator.getGlobalCostmap()
+        global_costmap = self.parking_node.navigator.getGlobalCostmap() # only static layer inflated
         costmap = PyCostmap2D(global_costmap)
         self.parking_node.checker.setCostmap(costmap)
 

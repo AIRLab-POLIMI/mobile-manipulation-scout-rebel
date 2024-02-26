@@ -446,6 +446,7 @@ void ButtonPresser::saveMarkersPositions() {
 					aruco_markers_saved[j] = std::make_shared<geometry_msgs::msg::Pose>(*aruco_markers[j]);
 				}
 			}
+			return;
 		} else {
 			// wait for 50ms before checking if aruco have been detected
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -700,8 +701,8 @@ bool ButtonPresser::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr 
 	move_group->setPlanningTime(2.0);
 
 	// optionally limit accelerations and velocity scaling
-	move_group->setMaxVelocityScalingFactor(0.2);
-	move_group->setMaxAccelerationScalingFactor(0.2);
+	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_cartesian_space);
+	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
 	// move_group->setPlanningPipelineId("ompl");
 
 	/*
@@ -801,8 +802,8 @@ double ButtonPresser::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pos
 	move_group->setPlanningTime(20.0);
 
 	// optionally limit accelerations and velocity scaling
-	move_group->setMaxVelocityScalingFactor(0.2);
-	move_group->setMaxAccelerationScalingFactor(0.2);
+	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_cartesian_space);
+	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
 
 	// output robot trajectory and output error code
 	moveit_msgs::msg::RobotTrajectory cartesian_trajectory;
@@ -884,8 +885,8 @@ bool ButtonPresser::robotPlanAndMove(std::vector<double> joint_space_goal) {
 
 	moveit::planning_interface::MoveGroupInterface::Plan static_search_plan;
 	// optionally limit accelerations and velocity scaling
-	move_group->setMaxVelocityScalingFactor(0.5);
-	move_group->setMaxAccelerationScalingFactor(0.2);
+	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_joint_space);
+	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
 	moveit::core::MoveItErrorCode response = move_group->plan(static_search_plan);
 
 	// visualizing the trajectory

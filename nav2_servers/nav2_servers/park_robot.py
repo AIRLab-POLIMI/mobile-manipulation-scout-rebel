@@ -123,8 +123,8 @@ class RobotParking(Node):
     FREE_SPACE = 0
 
     # parking algorithm parameters
-    target_radius = 0.5  # meters
-    theta_samples = 10  # number of random samples for x,y coordinates, where theta is the orientation from the target
+    target_radius = 0.6  # meters
+    theta_samples = 15  # number of random samples for x,y coordinates, where theta is the orientation from the target
     phi_samples = 10  # number of random samples for phi orientation, where phi is the orientation delta from theta
     theta_delta_max = np.pi / 6.0  # radians, maximum orientation delta from the normal of the target pose
     phi_delta_max = np.pi / 3.0  # radians, maximum orientation variation of the mobile base with respect to the theta angle
@@ -215,7 +215,7 @@ class RobotParking(Node):
         # Wait for navigation to fully activate, since autostarting nav2
         self.navigator.waitUntilNav2Active(localizer="robot_localization")
 
-        global_costmap = self.navigator.getGlobalCostmap()
+        global_costmap = self.navigator.getGlobalCostmap() # only static layer inflated
         costmap = PyCostmap2D(global_costmap)
         self.checker.setCostmap(costmap)
 

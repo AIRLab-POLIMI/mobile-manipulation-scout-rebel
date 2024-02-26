@@ -248,6 +248,9 @@ def launch_setup(context, *args, **kwargs):
                 "load_base": LaunchConfiguration("load_base"),
             }
         ],
+        remappings=[("/aruco/markers", "/aruco/markers/big")],
+        output="screen",
+
     )
 
     robot_parking_action_server = Node(
@@ -271,7 +274,7 @@ def launch_setup(context, *args, **kwargs):
     return [
         robot_parking_action_server,
         rviz2_node,
-        #button_presser_action_servers,
+        button_presser_action_servers,
         parking_and_interact_client,
         
     ]

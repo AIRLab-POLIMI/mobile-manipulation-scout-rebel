@@ -98,7 +98,7 @@ public:
 	 * once the markers are found, the robot will execute the button presser demonstration
 	 * @param goal_handle the goal to be executed
 	 */
-	void lookAroundForArucoMarkers(const std::shared_ptr<GoalHandleButtonPress> goal_handle);
+	void lookNearbyForArucoMarkers(const std::shared_ptr<GoalHandleButtonPress> goal_handle);
 
 	/**
 	 * @brief execute main thread to press the buttons demonstration, after aruco markers have been found
@@ -113,7 +113,7 @@ public:
 	 * @param goal_handle the goal to be executed
 	 * @return geometry_msgs::msg::PoseStamped::SharedPtr the position of the found aruco marker
 	 */
-	geometry_msgs::msg::PoseStamped::SharedPtr lookAroundForArucoMarkers(
+	geometry_msgs::msg::PoseStamped::SharedPtr lookFarForArucoMarkers(
 		const std::shared_ptr<GoalHandleButtonFind> goal_handle);
 
 	/**

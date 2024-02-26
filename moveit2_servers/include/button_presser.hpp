@@ -49,7 +49,7 @@ private:
 	bool load_base_arg;
 
 	const std::string aruco_markers_corrected_topic = "/aruco/markers/corrected";
-	const std::string aruco_single_marker_topic = "/aruco/markers/big";
+	const std::string aruco_single_marker_topic = "/aruco/markers";
 
 	// vector of double values for the joint position of the parked group state value
 	std::vector<double> parked_joint_positions;
@@ -94,6 +94,10 @@ private:
 	// tolerance values for end effector poses
 	const float orientation_tolerance = 0.1; // radians
 	const float position_tolerance = 0.005;	 // meters
+
+	const float max_velocity_scaling_joint_space = 0.5;
+	const float max_velocity_scaling_cartesian_space = 0.3;
+	const float max_acceleration_scaling = 0.3;
 
 	// these quaternions describe the rotations required to get from the aruco poses to
 	// the end effector pose in such a way that the end effector (last joint) doesn't rotate if not necessary

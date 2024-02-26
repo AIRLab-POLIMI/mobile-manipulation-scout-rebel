@@ -180,6 +180,9 @@ private:
 
 	// subscriber to /target_pose topic
 	rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_subscriber_;
+	// publisher to /target_pose topic
+	rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr target_publisher_;
+	
 	// flag to check if target pose is available
 	bool target_available;
 	// computed target pose from the parking algorithm

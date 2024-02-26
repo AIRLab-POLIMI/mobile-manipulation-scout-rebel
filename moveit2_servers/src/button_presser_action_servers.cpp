@@ -75,7 +75,11 @@ void ButtonPresserActionServers::execute_press_callback(const std::shared_ptr<Go
 	RCLCPP_INFO(LOGGER, "Executing goal request for pressing buttons");
 
 	const auto goal = goal_handle->get_goal();
-	lookAroundForArucoMarkers(goal_handle);
+	
+	// first look nearby for finding the buttons setup box
+	lookNearbyForArucoMarkers(goal_handle);
+	
+	// then execute the main thread for pressing all buttons in a row
 	buttonPresserThread(goal_handle);
 }
 
@@ -119,13 +123,13 @@ void ButtonPresserActionServers::execute_find_callback(const std::shared_ptr<Goa
 
 	// look in the surroundings for an aruco marker until it is found
 	// and get the position of the found aruco marker
-	geometry_msgs::msg::PoseStamped::SharedPtr target_found = lookAroundForArucoMarkers(goal_handle);
-
-	// sets the button presser API to not ready so that the next action (button press) can be executed
-	button_presser_api_->setReady(false);
+	geometry_msgs::msg::PoseStamped::SharedPtr target_found = lookFarForArucoMarkers(goal_handle);
 
 	// move the robot arm to the static predefined parked position, after the aruco marker has been found
 	moveToParkedPosition(goal_handle);
+
+	// sets the button presser API to not ready so that the next action (button press) can be executed
+	button_presser_api_->setReady(false);
 
 	// return the position of the found aruco marker as the result of the goal
 	auto result = std::make_shared<ButtonFindAction::Result>();
@@ -139,13 +143,16 @@ void ButtonPresserActionServers::execute_find_callback(const std::shared_ptr<Goa
  * once the markers are found, the robot will execute the button presser demonstration
  * @param goal_handle the goal to be executed
  */
-void ButtonPresserActionServers::lookAroundForArucoMarkers(const std::shared_ptr<GoalHandleButtonPress> goal_handle) {
+void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr<GoalHandleButtonPress> goal_handle) {
 	// call the functions from the button presser API, and construct extended version of lookAroundForArucoMarkers
 	// return markers found feedback and succeed once the aruco markers are found
 
 	// first move the robot arm to the static searching pose, looking in front of the robot arm with the camera facing downwards
-	std::vector<double> first_position = {-3.1, -0.5, -0.35, 0.0, 1.74, 0.0};
+	std::vector<double> first_position = {3.1, -1.0, 0.4, 0.0, 1.74, 0.0};
 	bool valid_motion = this->button_presser_api_->robotPlanAndMove(first_position);
+
+	// sets the button presser API to not ready so that the next action (button press) can be executed
+	this->button_presser_api_->setReady(false);
 
 	// then create array of waypoints to follow in joint space, in order to look around for the aruco markers
 	std::vector<std::vector<double>> waypoints;
@@ -355,7 +362,7 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
  * @param goal_handle the goal to be executed
  * @return geometry_msgs::msg::PoseStamped::SharedPtr the position of the found aruco marker
  */
-geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookAroundForArucoMarkers(
+geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarForArucoMarkers(
 	const std::shared_ptr<GoalHandleButtonFind> goal_handle) {
 	// first move the robot arm to the static searching pose, looking in front of the robot arm with the camera facing downwards
 	std::vector<double> first_position = {-3.1, -0.5, -0.35, 0.0, 1.74, 0.0};

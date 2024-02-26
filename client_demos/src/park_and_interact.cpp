@@ -23,11 +23,14 @@ ParkAndInteract::ParkAndInteract(const rclcpp::NodeOptions &node_options) : Node
 	this->target_subscriber_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
 		"/target_pose", 10, std::bind(&ParkAndInteract::target_callback, this, std::placeholders::_1));
 
+	// publisher to /target_pose topic for visualization in rviz2 when target is computed by button finder
+	this->target_publisher_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/target_pose", 10);
+
 	target_available = false;
 
 	// Start main thread
 	// NOTE: choose which main function to execute for testing purposes
-	main_thread_ = std::thread(std::bind(&ParkAndInteract::main_thread_parking_only, this));
+	main_thread_ = std::thread(std::bind(&ParkAndInteract::main_thread_demo, this));
 	main_thread_.detach();
 }
 
@@ -108,11 +111,15 @@ void ParkAndInteract::main_thread_button_finder(void) {
 		return;
 	}
 
+	while (!target_available) {
+		// ensure target pose is available before proceeding
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
 	// target pose received as result
 	if (target_available) {
-		// publish target pose to /target_pose topic
-		auto target_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("/target_pose", 10);
-		target_publisher->publish(*target_pose);
+		// publish target pose to /target_pose topic for visualization in rviz2
+		target_publisher_->publish(*target_pose);
 	}
 	RCLCPP_INFO(logger_, "Button finder demo terminated successfully");
 }
@@ -185,6 +192,8 @@ void ParkAndInteract::main_thread_demo(void) {
 		// ensure target pose is available before proceeding
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}
+	// publish target pose for visualization purposes
+	target_publisher_->publish(*target_pose);
 
 	// STEP 2: send goal to parking action server with the obtained target pose
 	auto future_park_goal = sendParkingGoal();
