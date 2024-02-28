@@ -129,7 +129,7 @@ void ButtonPresserActionServers::execute_find_callback(const std::shared_ptr<Goa
 	moveToParkedPosition(goal_handle);
 
 	// sets the button presser API to not ready so that the next action (button press) can be executed
-	button_presser_api_->setReady(false);
+	button_presser_api_->setReadyToPress(false);
 
 	// return the position of the found aruco marker as the result of the goal
 	auto result = std::make_shared<ButtonFindAction::Result>();
@@ -147,12 +147,8 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 	// call the functions from the button presser API, and construct extended version of lookAroundForArucoMarkers
 	// return markers found feedback and succeed once the aruco markers are found
 
-	// first move the robot arm to the static searching pose, looking in front of the robot arm with the camera facing downwards
-	std::vector<double> first_position = {3.1, -1.0, 0.4, 0.0, 1.74, 0.0};
-	bool valid_motion = this->button_presser_api_->robotPlanAndMove(first_position);
-
 	// sets the button presser API to not ready so that the next action (button press) can be executed
-	this->button_presser_api_->setReady(false);
+	this->button_presser_api_->setReadyToPress(false);
 
 	// then create array of waypoints to follow in joint space, in order to look around for the aruco markers
 	std::vector<std::vector<double>> waypoints;
@@ -170,7 +166,7 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 		goal_handle->publish_feedback(feedback);
 
 		// move the robot arm to the current waypoint
-		valid_motion = this->button_presser_api_->robotPlanAndMove(waypoints[i]);
+		bool valid_motion = this->button_presser_api_->robotPlanAndMove(waypoints[i]);
 		if (!valid_motion) {
 			RCLCPP_ERROR(LOGGER, "Could not move to waypoint %d", i);
 			continue; // attempt planning to next waypoint and skip this one
@@ -181,7 +177,7 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 
 		// while the robot is moving, check whether the aruco markers have been detected between each waypoint
 		// if yes, stop the robot and start the demo
-		if (this->button_presser_api_->isReady()) {
+		if (this->button_presser_api_->isReadyToPress()) {
 			RCLCPP_INFO(LOGGER, "Aruco markers detected, ending search");
 
 			// update feedback status
@@ -194,6 +190,9 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 				// if the aruco markers have not been detected, reiterate the waypoints
 				RCLCPP_INFO(LOGGER, "Aruco markers not detected yet, reiterating waypoints search");
 				i = -1; // reset the counter to reiterate the waypoints
+
+				// reverse waypoints order to look around in the opposite direction
+				std::reverse(waypoints.begin(), waypoints.end());
 			}
 		}
 	}
@@ -216,6 +215,9 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 
 	// save the current markers positions
 	this->button_presser_api_->saveMarkersPositions();
+
+	// remove collision walls from the planning scene
+	this->button_presser_api_->removeCollisionWalls();
 
 	int count_completed_motions = 0;
 	float percentage_completion_linear_motions = 0.0;
@@ -364,10 +366,6 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
  */
 geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarForArucoMarkers(
 	const std::shared_ptr<GoalHandleButtonFind> goal_handle) {
-	// first move the robot arm to the static searching pose, looking in front of the robot arm with the camera facing downwards
-	std::vector<double> first_position = {-3.1, -0.5, -0.35, 0.0, 1.74, 0.0};
-	bool valid_motion = this->button_presser_api_->robotPlanAndMove(first_position);
-
 	// then create array of waypoints to follow in joint space, in order to look around for the aruco markers
 	std::vector<std::vector<double>> waypoints;
 	waypoints = this->button_presser_api_->computeSearchingWaypoints(false);
@@ -384,7 +382,7 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarFo
 		goal_handle->publish_feedback(feedback);
 
 		// move the robot arm to the current waypoint
-		valid_motion = this->button_presser_api_->robotPlanAndMove(waypoints[i]);
+		bool valid_motion = this->button_presser_api_->robotPlanAndMove(waypoints[i]);
 		if (!valid_motion) {
 			RCLCPP_ERROR(LOGGER, "Could not move to waypoint %d", i);
 			continue; // attempt planning to next waypoint and skip this one
@@ -397,7 +395,7 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarFo
 		std::this_thread::sleep_for(std::chrono::milliseconds(25));
 
 		// check whether the aruco markers have been detected
-		if (this->button_presser_api_->isReady()) {
+		if (this->button_presser_api_->isLocationReady()) {
 			RCLCPP_INFO(LOGGER, "Aruco markers detected, ending search");
 
 			// update feedback status
@@ -410,6 +408,9 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarFo
 				// if the aruco markers have not been detected, reiterate the waypoints
 				RCLCPP_INFO(LOGGER, "Aruco markers not detected yet, reiterating waypoints search");
 				i = -1; // reset the counter to reiterate the waypoints
+
+				// reverse waypoints order to look around in the opposite direction
+				std::reverse(waypoints.begin(), waypoints.end());
 			}
 		}
 	}

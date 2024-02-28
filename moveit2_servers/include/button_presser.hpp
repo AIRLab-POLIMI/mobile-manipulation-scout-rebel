@@ -17,6 +17,7 @@
 #include <moveit/planning_interface/planning_interface.h>
 #include <moveit/planning_pipeline/planning_pipeline.h>
 #include <moveit/planning_scene/planning_scene.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/conversions.h>
@@ -43,7 +44,7 @@ private:
 	std::string camera_frame_name;
 	// planning and frame transformations are done in the fixed base frame
 	const std::string fixed_base_frame = "igus_rebel_base_link";
-	std::string root_base_frame;
+	std::string root_base_frame; // base footprint or map
 
 	// load base arg
 	bool load_base_arg;
@@ -77,13 +78,13 @@ private:
 
 	// position deltas in meters between the aruco marker and the button (assuming sorted markers)
 	//  in order: looking pose, button 1, button 2, button 3
-	const float delta_x[n_btns + 1] = {0.0, 0.0, -0.01, -0.01};
-	const float delta_y[n_btns + 1] = {0.0, 0.08, 0.07, 0.07};
-	const float delta_z[n_btns + 1] = {0.15, 0.08, 0.07, 0.08};
+	const float delta_x[n_btns + 1] = {0.0, 0.02, 0.01, 0.01};
+	const float delta_y[n_btns + 1] = {0.0, 0.11, 0.1, 0.1};
+	const float delta_z[n_btns + 1] = {0.15, 0.09, 0.09, 0.09};
 
 	// position vertical axis delta required to go down and press the button (or release it)
 	// in order: button 1, button 2, button 3
-	const double delta_pressing[n_btns] = {0.08, 0.08, 0.08};
+	const double delta_pressing[n_btns] = {0.07, 0.07, 0.07};
 
 	// robot arm joint values for the looking pose
 	// should be valid for both scenarios where igus is mounted on the mobile robot base or on a table
@@ -92,7 +93,7 @@ private:
 	const std::vector<double> search_joints_positions = {-0.5, -1.2, 1.0, 0.0, 1.5, 0.0}; // radians
 
 	// tolerance values for end effector poses
-	const float orientation_tolerance = 0.1; // radians
+	const float orientation_tolerance = 0.2; // radians
 	const float position_tolerance = 0.005;	 // meters
 
 	const float max_velocity_scaling_joint_space = 0.5;
@@ -110,21 +111,22 @@ private:
 	const double max_step = 0.05;	   // maximum distance between consecutive waypoints
 
 	// multi aruco markers setup subscriber
-	rclcpp::Subscription<aruco_interfaces::msg::ArucoMarkers>::SharedPtr aruco_markers_sub;
+	rclcpp::Subscription<aruco_interfaces::msg::ArucoMarkers>::SharedPtr aruco_markers_plane_sub;
 	// single aruco marker subscriber
 	rclcpp::Subscription<aruco_interfaces::msg::ArucoMarkers>::SharedPtr aruco_single_marker_sub;
 
 	// thread for tracking the goal pose
 	std::thread button_presser_demo_thread;
 
-	// ready when aruco markers have been collected and the demo can start
-	bool ready;
+	bool ready_press; // ready when aruco markers have been collected and the button preessing demo can start
+	bool ready_location; // ready when the single aruco marker indicating the location of the aruco markers is found
 
 	// planning and moving utilities
 	moveit::planning_interface::MoveGroupInterface *move_group;
 	const moveit::core::JointModelGroup *joint_model_group;
 	planning_interface::PlannerManagerPtr planner_instance;
 	planning_scene::PlanningScene *planning_scene;
+	moveit::planning_interface::PlanningSceneInterface *planning_scene_interface_;
 
 	// this node
 	std::shared_ptr<rclcpp::Node> button_presser_node;
@@ -270,9 +272,21 @@ public:
 	 */
 	bool robotPlanAndMove(std::vector<double> joint_space_goal);
 
-	// getter and setter for the ready flag
-	bool isReady(void);
-	void setReady(bool ready);
+	/**
+	 * @brief Create a workspace for the robot using a set of virtual walls acting as collision objects
+	 * @return the set of collision objects representing the virtual walls
+	 */
+	std::vector<moveit_msgs::msg::CollisionObject> createCollisionWalls(void);
+
+	/**
+	 * @brief Remove the virtual walls from the planning scene
+	 */
+	void removeCollisionWalls(void);
+
+	// getter and setter for the ready flags
+	bool isLocationReady(void);
+	bool isReadyToPress(void);
+	void setReadyToPress(bool ready);
 
 	// getter for reference_marker_pose
 	geometry_msgs::msg::PoseStamped::SharedPtr getReferenceMarkerPose(void);

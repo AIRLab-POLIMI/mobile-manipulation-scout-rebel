@@ -7,30 +7,8 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
-# Python imports
-import os
-from ament_index_python.packages import get_package_share_directory
-import yaml
-
 
 def generate_launch_description():
-
-    aruco_params_file = os.path.join(
-        get_package_share_directory('aruco_pose_estimation'),
-        'config',
-        'aruco_parameters.yaml'
-    )
-
-    with open(aruco_params_file, 'r') as file:
-        config = yaml.safe_load(file)
-
-    config = config["/aruco_node"]["ros__parameters"]
-
-    camera_frame_arg = DeclareLaunchArgument(
-        name='camera_frame',
-        default_value=config['camera_frame'],
-        description='Name of the camera frame where the estimated pose will be',
-    )
 
     # include launch description from aruco_pose_estimation package
     aruco_pose_estimation_launch = IncludeLaunchDescription(
@@ -39,7 +17,11 @@ def generate_launch_description():
                 FindPackageShare("aruco_pose_estimation"),
                 "launch",
                 "aruco_pose_estimation.launch.py"])
-        )
+        ),
+        launch_arguments={
+            "marker_size": "0.033",
+            "aruco_dictionary_id": "DICT_4X4_50",
+        }.items(),
     )
 
     # launch multi aruco plane detection node
@@ -54,8 +36,7 @@ def generate_launch_description():
         emulate_tty=True,
     )
 
-    return LaunchDescription(
-        [camera_frame_arg,
-         aruco_pose_estimation_launch,
-         multi_aruco_node]
-    )
+    return LaunchDescription([
+        aruco_pose_estimation_launch,
+        multi_aruco_node
+    ])

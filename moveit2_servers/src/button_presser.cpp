@@ -13,7 +13,7 @@ ButtonPresser::ButtonPresser(const rclcpp::NodeOptions &node_options) : Node("bu
 	RCLCPP_INFO(LOGGER, "Starting button presser demo");
 
 	// aruco markers subscriber to multi_aruco_plane_detection node
-	aruco_markers_sub = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
+	aruco_markers_plane_sub = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
 		this->aruco_markers_corrected_topic, 10,
 		std::bind(&ButtonPresser::arucoMarkersCorrectedCallback, this, std::placeholders::_1));
 
@@ -21,7 +21,8 @@ ButtonPresser::ButtonPresser(const rclcpp::NodeOptions &node_options) : Node("bu
 	aruco_single_marker_sub = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
 		this->aruco_single_marker_topic, 10, std::bind(&ButtonPresser::arucoMarkerCallback, this, std::placeholders::_1));
 
-	ready = false;
+	ready_location = false;
+	ready_press = false;
 
 	// temporary and final aruco markers array
 	aruco_markers = std::vector<geometry_msgs::msg::Pose::SharedPtr>(n_btns);
@@ -60,6 +61,9 @@ void ButtonPresser::initPlanner() {
 
 	move_group = new moveit::planning_interface::MoveGroupInterface(button_presser_node, PLANNING_GROUP);
 
+	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+	//planning_scene_interface_ = &planning_scene_interface;
+
 	// We can print the name of the reference frame for this robot.
 	root_base_frame = move_group->getPlanningFrame();
 	RCLCPP_INFO(LOGGER, "Planning frame was: %s", root_base_frame.c_str());
@@ -84,7 +88,7 @@ void ButtonPresser::initPlanner() {
 
 	move_group->setStartState(*robot_state);
 
-	move_group->setNumPlanningAttempts(5);
+	move_group->setNumPlanningAttempts(20);
 
 	// Create a JointModelGroup to keep track of the current robot pose and planning group. The Joint Model
 	// group is useful for dealing with one set of joints at a time such as a left arm or a end effector
@@ -232,10 +236,6 @@ bool ButtonPresser::moveToParkedPosition(void) {
  */
 void ButtonPresser::lookAroundForArucoMarkers(bool look_nearby) {
 
-	// first move the robot arm to the static searching pose, looking in front of the robot arm with the camera facing downwards
-	std::vector<double> first_position = {-3.1, -0.5, -0.35, 0.0, 1.74, 0.0};
-	bool valid_motion = this->robotPlanAndMove(first_position);
-
 	// then create array of waypoints to follow in joint space, in order to look around for the aruco markers
 	std::vector<std::vector<double>> waypoints;
 	waypoints = this->computeSearchingWaypoints(look_nearby);
@@ -247,7 +247,7 @@ void ButtonPresser::lookAroundForArucoMarkers(bool look_nearby) {
 		RCLCPP_INFO(LOGGER, "Moving to waypoint %d", i);
 
 		// move the robot arm to the current waypoint
-		valid_motion = this->robotPlanAndMove(waypoints[i]);
+		bool valid_motion = this->robotPlanAndMove(waypoints[i]);
 		if (!valid_motion) {
 			RCLCPP_ERROR(LOGGER, "Could not move to waypoint %d", i);
 			continue; // attempt planning to next waypoint and skip this one
@@ -258,7 +258,7 @@ void ButtonPresser::lookAroundForArucoMarkers(bool look_nearby) {
 
 		// while the robot is moving, check whether the aruco markers have been detected between each waypoint
 		// if yes, stop the robot and start the demo
-		if (ready) {
+		if ((ready_press && look_nearby) || (ready_location && !look_nearby)) {
 			RCLCPP_INFO(LOGGER, "Aruco markers detected, ending search");
 			break;
 		} else {
@@ -266,6 +266,9 @@ void ButtonPresser::lookAroundForArucoMarkers(bool look_nearby) {
 				// if the aruco markers have not been detected, reiterate the waypoints
 				RCLCPP_INFO(LOGGER, "Aruco markers not detected yet, reiterating waypoints search");
 				i = -1; // reset the counter to reiterate the waypoints
+
+				// reverse waypoints order to look around in the opposite direction
+				std::reverse(waypoints.begin(), waypoints.end());
 			}
 		}
 	}
@@ -383,7 +386,7 @@ void ButtonPresser::arucoMarkersCorrectedCallback(const aruco_interfaces::msg::A
 	}
 
 	// set the ready flag after successful button setup detection
-	ready = true;
+	ready_press = true;
 }
 
 /**
@@ -426,7 +429,7 @@ void ButtonPresser::arucoMarkerCallback(const aruco_interfaces::msg::ArucoMarker
 
 	this->reference_marker_pose = aruco_marker_tf_pose_stamped;
 
-	ready = true;
+	ready_location = true;
 }
 
 /**
@@ -434,7 +437,7 @@ void ButtonPresser::arucoMarkerCallback(const aruco_interfaces::msg::ArucoMarker
  */
 void ButtonPresser::saveMarkersPositions() {
 	while (rclcpp::ok()) {
-		if (ready) { // starts the demo
+		if (ready_press) { // starts the demo
 			RCLCPP_INFO(LOGGER, "Button setup detected, demo can start");
 
 			// acquire aruco markers array mutex
@@ -460,7 +463,11 @@ void ButtonPresser::saveMarkersPositions() {
 void ButtonPresser::buttonPresserDemoThread() {
 	RCLCPP_INFO(LOGGER, "Starting button presser demo thread");
 
+	// wait until the aruco markers have been detected, then save their positions
 	this->saveMarkersPositions();
+
+	// remove walls and obstacles from the planning scene
+	this->removeCollisionWalls();
 
 	RCLCPP_INFO(LOGGER, "Moving to looking position");
 	// first move to the predefined looking pose
@@ -852,7 +859,13 @@ bool ButtonPresser::robotPlanAndMove(std::vector<double> joint_space_goal) {
 	move_group->setStartState(*move_group->getCurrentState());
 	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
 	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
-	move_group->setPlanningTime(2.0);
+	move_group->setPlanningTime(5.0);
+
+	// instantiate a set of collision walls acting as workspace bounds
+	std::vector<moveit_msgs::msg::CollisionObject> collision_walls = this->createCollisionWalls();
+	// add collision walls to the planning scene
+	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+	planning_scene_interface.addCollisionObjects(collision_walls);
 
 	bool valid_motion = move_group->setJointValueTarget(goal_state);
 	if (!valid_motion) {
@@ -907,14 +920,101 @@ bool ButtonPresser::robotPlanAndMove(std::vector<double> joint_space_goal) {
 	return bool(response);
 }
 
+/**
+ * @brief Create a workspace for the robot using a set of virtual walls acting as collision objects
+ * @return the set of collision objects representing the virtual walls
+*/
+std::vector<moveit_msgs::msg::CollisionObject> ButtonPresser::createCollisionWalls() {
+	// add box collision objects to the planning scene
+
+	// definition of the first wall
+	moveit_msgs::msg::CollisionObject wall1, wall2, wall3;
+	wall1.header.frame_id = root_base_frame;
+	wall1.id = "wall1";
+
+	shape_msgs::msg::SolidPrimitive primitive;
+	primitive.type = primitive.BOX;
+	primitive.dimensions.resize(3);
+	primitive.dimensions[primitive.BOX_X] = 0.8;
+	primitive.dimensions[primitive.BOX_Y] = 0.05;
+	primitive.dimensions[primitive.BOX_Z] = 1.5;
+
+	geometry_msgs::msg::Pose wall1_pose;
+	wall1_pose.orientation.w = 1.0;
+	wall1_pose.position.x = -0.2;
+	wall1_pose.position.y = -0.4;
+	wall1_pose.position.z = 0.7;
+
+	wall1.primitives.push_back(primitive);
+	wall1.primitive_poses.push_back(wall1_pose);
+	wall1.operation = wall1.ADD;
+
+	// definition of the second wall
+	wall2.header.frame_id = root_base_frame;
+	wall2.id = "wall2";
+
+	geometry_msgs::msg::Pose wall2_pose;
+	wall2_pose.orientation.w = 1.0;
+	wall2_pose.position.x = -0.2;
+	wall2_pose.position.y = 0.4;
+	wall2_pose.position.z = 0.7;
+
+	wall2.primitives.push_back(primitive);
+	wall2.primitive_poses.push_back(wall2_pose);
+	wall2.operation = wall2.ADD;
+
+	// definition of the third wall
+	wall3.header.frame_id = root_base_frame;
+	wall3.id = "wall3";
+
+	shape_msgs::msg::SolidPrimitive primitive3;
+	primitive3.type = primitive3.BOX;
+	primitive3.dimensions.resize(3);
+	primitive3.dimensions[primitive3.BOX_X] = 0.05;
+	primitive3.dimensions[primitive3.BOX_Y] = 1.0;
+	primitive3.dimensions[primitive3.BOX_Z] = 1.5;
+
+	geometry_msgs::msg::Pose wall3_pose;
+	wall3_pose.orientation.w = 1.0;
+	wall3_pose.position.x = -0.6;
+	wall3_pose.position.y = 0.0;
+	wall3_pose.position.z = 0.7;
+
+	wall3.primitives.push_back(primitive3);
+	wall3.primitive_poses.push_back(wall3_pose);
+	wall3.operation = wall3.ADD;
+
+	// add the walls to the set of collision objects
+	std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
+	collision_objects.push_back(wall1);
+	collision_objects.push_back(wall2);
+	collision_objects.push_back(wall3);
+
+	return collision_objects;
+}
+
+/**
+ * @brief Remove the virtual walls from the planning scene
+*/
+void ButtonPresser::removeCollisionWalls() {
+	// remove the collision walls from the planning scene
+	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+	planning_scene_interface.removeCollisionObjects({"wall1", "wall2", "wall3"});
+}
+
 // getter for the ready flag
-bool ButtonPresser::isReady() {
-	return this->ready;
+bool ButtonPresser::isReadyToPress() {
+	return this->ready_press;
 }
 
 // setter for the ready flag
-void ButtonPresser::setReady(bool ready) {
-	this->ready = ready;
+void ButtonPresser::setReadyToPress(bool ready) {
+	this->ready_press = ready;
+}
+
+// getter for the ready location flag
+bool ButtonPresser::isLocationReady() {
+	return this->ready_location;
 }
 
 // getter for the reference marker pose
