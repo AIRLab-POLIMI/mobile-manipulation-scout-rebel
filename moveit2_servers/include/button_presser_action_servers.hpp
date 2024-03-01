@@ -130,6 +130,8 @@ private:
 	// button presser API object
 	std::shared_ptr<ButtonPresser> button_presser_api_;
 
+	const bool localized_search = true;
+
 	// logger
 	const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit2_server::button_presser");
 };

@@ -75,10 +75,10 @@ void ButtonPresserActionServers::execute_press_callback(const std::shared_ptr<Go
 	RCLCPP_INFO(LOGGER, "Executing goal request for pressing buttons");
 
 	const auto goal = goal_handle->get_goal();
-	
+
 	// first look nearby for finding the buttons setup box
 	lookNearbyForArucoMarkers(goal_handle);
-	
+
 	// then execute the main thread for pressing all buttons in a row
 	buttonPresserThread(goal_handle);
 }
@@ -152,7 +152,14 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 
 	// then create array of waypoints to follow in joint space, in order to look around for the aruco markers
 	std::vector<std::vector<double>> waypoints;
-	waypoints = this->button_presser_api_->computeSearchingWaypoints(true);
+
+	if (localized_search) {
+		// localized search for aruco markers
+		waypoints = this->button_presser_api_->computeLocalizedSearchingWaypoints();
+	} else {
+		// general search for aruco markers
+		waypoints = this->button_presser_api_->computeSearchingWaypoints(true);
+	}
 
 	// iterate over the waypoints and move the robot arm to each of them
 	int waypoints_size = (int)waypoints.size();
@@ -233,8 +240,9 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// first move to the predefined looking pose
 	geometry_msgs::msg::PoseStamped::SharedPtr looking_pose = this->button_presser_api_->computeLookingPose();
 	bool move1 = this->button_presser_api_->robotPlanAndMove(looking_pose);
-	if (move1)
+	if (move1) {
 		count_completed_motions++;
+	}
 
 	// then press the buttons in order
 	// button 1
@@ -247,13 +255,9 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// move to the pose above the button 1
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_1 = this->button_presser_api_->getPoseAboveButton(1);
 	bool move2 = this->button_presser_api_->robotPlanAndMove(pose_above_button_1);
-	if (move2)
+	if (move2) {
 		count_completed_motions++;
-
-	// descent to press the button
-	// geometry_msgs::msg::PoseStamped::SharedPtr pose_pressing_button_1 = this->getPosePressingButton(
-	//	std::make_shared<geometry_msgs::msg::Pose>(pose_above_button_1->pose), 1);
-	// this->robotPlanAndMove(pose_pressing_button_1, true);
+	}
 
 	// compute linear waypoints to press the button
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn1 = this->button_presser_api_->computeLinearWaypoints(
@@ -262,16 +266,20 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// move the robot arm along the linear waypoints --> descend to press the button
 	float move3 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn1);
 	percentage_completion_linear_motions += move3;
-	if (move3 == 1.0)
+	if (move3 == 1.0) {
 		count_completed_motions++;
+	}
 
-	// reverse the waypoints
-	std::reverse(linear_waypoints_btn1.begin(), linear_waypoints_btn1.end());
+	// ascent to release the button --> linear motion from the reached position to the starting position
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_1_reverse =
+		this->button_presser_api_->computeLinearWaypoints(-delta_pressing[0], 0.0, 0.0);
+
 	// move the robot arm along the linear waypoints --> ascend to release the button
-	float move4 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn1);
+	float move4 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_1_reverse);
 	percentage_completion_linear_motions += move4;
-	if (move4 == 1.0)
+	if (move4 == 1.0) {
 		count_completed_motions++;
+	}
 
 	// button 2
 	status = "Pressing button 2...";
@@ -283,8 +291,9 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// move to the pose above button 2
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_2 = this->button_presser_api_->getPoseAboveButton(2);
 	bool move5 = this->button_presser_api_->robotPlanAndMove(pose_above_button_2);
-	if (move5)
+	if (move5) {
 		count_completed_motions++;
+	}
 
 	// compute linear waypoints to press the button
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn2 = this->button_presser_api_->computeLinearWaypoints(
@@ -293,16 +302,19 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// move the robot arm along the linear waypoints --> descend to press the button
 	float move6 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn2);
 	percentage_completion_linear_motions += move6;
-	if (move6 == 1.0)
+	if (move6 == 1.0) {
 		count_completed_motions++;
+	}
 
-	// reverse the waypoints
-	std::reverse(linear_waypoints_btn2.begin(), linear_waypoints_btn2.end());
+	// ascent to release the button --> linear motion from the reached position to the starting position
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_2_reverse =
+		this->button_presser_api_->computeLinearWaypoints(-delta_pressing[1], 0.0, 0.0);
 	// move the robot arm along the linear waypoints --> ascend to release the button
-	float move7 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn2);
+	float move7 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_2_reverse);
 	percentage_completion_linear_motions += move7;
-	if (move7 == 1.0)
+	if (move7 == 1.0) {
 		count_completed_motions++;
+	}
 
 	// button 3
 	status = "Pressing button 3...";
@@ -314,8 +326,9 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// move to the pose above button 3
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_3 = this->button_presser_api_->getPoseAboveButton(3);
 	bool move8 = this->button_presser_api_->robotPlanAndMove(pose_above_button_3);
-	if (move8)
+	if (move8) {
 		count_completed_motions++;
+	}
 
 	// compute linear waypoints to press the button
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn3 = this->button_presser_api_->computeLinearWaypoints(
@@ -324,16 +337,18 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// move the robot arm along the linear waypoints --> descend to press the button
 	float move9 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn3);
 	percentage_completion_linear_motions += move9;
-	if (move9 == 1.0)
+	if (move9 == 1.0) {
 		count_completed_motions++;
+	}
 
-	// reverse the waypoints
-	std::reverse(linear_waypoints_btn3.begin(), linear_waypoints_btn3.end());
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_3_reverse =
+		this->button_presser_api_->computeLinearWaypoints(-delta_pressing[2], 0.0, 0.0);
 	// move the robot arm along the linear waypoints --> ascend to release the button
-	float move10 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn3);
+	float move10 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_3_reverse);
 	percentage_completion_linear_motions += move10;
-	if (move10 == 1.0)
+	if (move10 == 1.0) {
 		count_completed_motions++;
+	}
 
 	// move back to the looking pose
 	status = "Returning to looking pose and ending demo";
@@ -344,8 +359,9 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 
 	// move to the predefined looking pose
 	bool move11 = this->button_presser_api_->robotPlanAndMove(looking_pose);
-	if (move11)
+	if (move11) {
 		count_completed_motions++;
+	}
 
 	// end of demo
 	RCLCPP_INFO(LOGGER, "Ending button presser demo thread");

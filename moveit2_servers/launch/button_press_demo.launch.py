@@ -12,7 +12,6 @@ from moveit_launch import moveit_loader
 # it will start the necessary controllers and the moveit dependencies
 # start it with the correct gripper and hardware protocol arguments, and leaving rviz_file:=none (default)
 
-# launches only the URDF version 2 robot description
 def generate_launch_description():
     # declare launch arguments from moveit loader
     args = moveit_loader.declare_arguments()

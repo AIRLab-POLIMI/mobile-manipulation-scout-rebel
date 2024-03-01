@@ -79,7 +79,7 @@ private:
 	// position deltas in meters between the aruco marker and the button (assuming sorted markers)
 	//  in order: looking pose, button 1, button 2, button 3
 	const float delta_x[n_btns + 1] = {0.0, 0.02, 0.01, 0.01};
-	const float delta_y[n_btns + 1] = {0.0, 0.11, 0.1, 0.1};
+	const float delta_y[n_btns + 1] = {0.0, 0.13, 0.12, 0.13};
 	const float delta_z[n_btns + 1] = {0.15, 0.09, 0.09, 0.09};
 
 	// position vertical axis delta required to go down and press the button (or release it)
@@ -96,14 +96,13 @@ private:
 	const float orientation_tolerance = 0.2; // radians
 	const float position_tolerance = 0.005;	 // meters
 
+	// planning constants
 	const float max_velocity_scaling_joint_space = 0.5;
 	const float max_velocity_scaling_cartesian_space = 0.3;
 	const float max_acceleration_scaling = 0.3;
+	const short n_max_retries = 3;
 
-	// these quaternions describe the rotations required to get from the aruco poses to
-	// the end effector pose in such a way that the end effector (last joint) doesn't rotate if not necessary
-	const tf2::Quaternion flip_rotation = tf2::Quaternion(tf2::Vector3(0.0, 1.0, 0.0), M_PI_2);
-	const tf2::Quaternion extra_rotation = tf2::Quaternion(tf2::Vector3(1.0, 0.0, 0.0), -M_PI_2);
+	
 
 	// parameters for linear planning movement in cartesian path
 	const double jump_threshold = 0.0; // 0.0 disables jump threshold
@@ -115,10 +114,12 @@ private:
 	// single aruco marker subscriber
 	rclcpp::Subscription<aruco_interfaces::msg::ArucoMarkers>::SharedPtr aruco_single_marker_sub;
 
+	
+
 	// thread for tracking the goal pose
 	std::thread button_presser_demo_thread;
 
-	bool ready_press; // ready when aruco markers have been collected and the button preessing demo can start
+	bool ready_press;	 // ready when aruco markers have been collected and the button preessing demo can start
 	bool ready_location; // ready when the single aruco marker indicating the location of the aruco markers is found
 
 	// planning and moving utilities
@@ -135,6 +136,7 @@ private:
 	moveit_visual_tools::MoveItVisualTools *visual_tools;
 
 public:
+	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr test_aruco_marker_pub;
 	/**
 	 * @brief constructor for the button presser class
 	 * @param node_options the node options to use for the button presser node
@@ -194,10 +196,12 @@ public:
 
 	/**
 	 * @brief Predefined sequence of movements to look around for the aruco markers, by using joint space goals.
-	 *        It will deploy a series of positions waypoints to follow until the aruco markers are found.
+	 *       	It repeats the sequence of waypoints until the aruco markers are found.
 	 * @param look_nearby true if the aruco markers are nearby, false otherwise, changes the motion type
+	 * @param localized_search when looking nearby, if localized_search is true, the search motion is localized
+	 * 			around the area where the button box is expected to be located
 	 */
-	void lookAroundForArucoMarkers(bool look_nearby);
+	void lookAroundForArucoMarkers(bool look_nearby, bool localized_search = false);
 
 	/**
 	 * @brief Compute the waypoints to follow in joint space, in order to look around for the aruco markers
@@ -205,6 +209,13 @@ public:
 	 * @return the array of waypoints to follow in joint space
 	 */
 	std::vector<std::vector<double>> computeSearchingWaypoints(bool look_nearby);
+
+	/**
+	 * @brief Compute the waypoints to follow in joint space, in order to look around for the aruco markers
+	 *  	The search is localized around the area where the button box is expected to be located
+	 * @return the array of waypoints to follow in joint space
+	 */
+	std::vector<std::vector<double>> computeLocalizedSearchingWaypoints();
 
 	/**
 	 * @brief the looking pose: positioning along the x-axis such that the robot faces the buttons setup from a distance
@@ -250,6 +261,15 @@ public:
 	 */
 	std::vector<geometry_msgs::msg::Pose> computeLinearWaypoints(geometry_msgs::msg::Pose::SharedPtr starting_pose,
 																 double x_length, double y_length, double z_length);
+
+	/**
+	 * @brief compute the linear waypoints for the end effector to follow along the given axes, starting from the current pose
+	 * @param x_length the length of the movement along the x axis
+	 * @param y_length the length of the movement along the y axis
+	 * @param z_length the length of the movement along the z axis
+	 * @return the linear waypoints to follow to move the robot arm along the given lengths
+	 */
+	std::vector<geometry_msgs::msg::Pose> computeLinearWaypoints(double x_length, double y_length, double z_length);
 
 	/**
 	 * @param target_pose the target pose for the robotic arm to reach
