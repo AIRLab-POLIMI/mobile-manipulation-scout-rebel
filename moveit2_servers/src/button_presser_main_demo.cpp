@@ -11,8 +11,7 @@ int main(int argc, char *argv[]) {
 	// read parameters
 	rclcpp::NodeOptions node_options;
 	node_options.automatically_declare_parameters_from_overrides(true);
-	/*
-	//TODO: remove comments once the error in quaternion flipping is fixed
+	
 	// Create an instance of the button presser node
 	auto node = std::make_shared<ButtonPresser>(node_options);
 
@@ -43,33 +42,6 @@ int main(int argc, char *argv[]) {
 
 	main_thread->join();
 	button_presser_demo_thread.join();
-	*/
-
-	
-	// create a callback for topic subscription to /aruco/markers/corrected
-	auto node = std::make_shared<ButtonPresser>(node_options);
-	auto test_subscriber = node->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
-		"/aruco/markers/corrected", 10, [&](const aruco_interfaces::msg::ArucoMarkers::SharedPtr msg) {
-			RCLCPP_INFO(node->get_logger(), "Received %ld markers", msg->marker_ids.size());
-
-			// create a aruco markers message to publish on /aruco/markers/corrected
-			auto aruco_msg = geometry_msgs::msg::PoseArray();
-			aruco_msg.header.stamp = node->get_clock()->now();
-			aruco_msg.header.frame_id = "camera_color_optical_frame";
-			aruco_msg.poses = std::vector<geometry_msgs::msg::Pose>();
-			//aruco_msg.poses.reserve(msg->poses.size());
-			
-			for (int i = 0; i < msg->marker_ids.size(); i++) {
-				auto pose = std::make_shared<geometry_msgs::msg::Pose>(msg->poses[i]);
-				geometry_msgs::msg::Pose pose_tf = *node->apply_transform(pose, 0.01, 0.1, 0.1, true);
-				aruco_msg.poses.push_back(pose_tf);
-			}
-			node->test_aruco_marker_pub->publish(aruco_msg);
-
-		});
-	rclcpp::spin(node);
-	
-
 
 	// Cleanup and shutdown
 	rclcpp::shutdown();

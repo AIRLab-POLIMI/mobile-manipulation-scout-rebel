@@ -12,17 +12,14 @@
 ButtonPresser::ButtonPresser(const rclcpp::NodeOptions &node_options) : Node("button_presser_node", node_options) {
 	RCLCPP_INFO(LOGGER, "Starting button presser demo");
 
-	//TODO: remove comments once the error in quaternion flipping is fixed
 	// aruco markers subscriber to multi_aruco_plane_detection node
-	//aruco_markers_plane_sub = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
-	//	this->aruco_markers_corrected_topic, 10,
-	//	std::bind(&ButtonPresser::arucoMarkersCorrectedCallback, this, std::placeholders::_1));
+	aruco_markers_plane_sub = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
+		this->aruco_markers_corrected_topic, 10,
+		std::bind(&ButtonPresser::arucoMarkersCorrectedCallback, this, std::placeholders::_1));
 
 	// aruco markers subscriber to aruco_recognition node
-	//aruco_single_marker_sub = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
-	//	this->aruco_single_marker_topic, 10, std::bind(&ButtonPresser::arucoMarkerCallback, this, std::placeholders::_1));
-
-	test_aruco_marker_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("/test_aruco_marker", 10);
+	aruco_single_marker_sub = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
+		this->aruco_single_marker_topic, 10, std::bind(&ButtonPresser::arucoMarkerCallback, this, std::placeholders::_1));
 
 	ready_location = false;
 	ready_press = false;
@@ -314,7 +311,6 @@ std::vector<std::vector<double>> ButtonPresser::computeSearchingWaypoints(bool l
 
 	} else {
 		// first layer of waypoints is skipped because it is used only for distant aruco markers
-		// TODO: maybe add extra first layer of waypoints
 		if (this->load_base_arg) {
 			// limit robot movement range when the robotic arm is mounted on the mobile robot base
 			range_min = -1.5;
@@ -354,7 +350,7 @@ std::vector<std::vector<double>> ButtonPresser::computeSearchingWaypoints(bool l
  * @brief Compute the waypoints to follow in joint space, in order to look around for the aruco markers
  *  	The search is localized around the area where the button box is expected to be located
  * @return the array of waypoints to follow in joint space
-*/
+ */
 std::vector<std::vector<double>> ButtonPresser::computeLocalizedSearchingWaypoints() {
 	// localized search waypoints: reduced range of motion to cover only the area where the button box is expected
 	float range_max = M_PI, range_min = -M_PI / 3.0;
@@ -389,7 +385,7 @@ std::vector<std::vector<double>> ButtonPresser::computeLocalizedSearchingWaypoin
 		std::vector<double> pos = {i, -M_PI_2, 45.0 * M_PI / 180.0, 0.0, 100.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
-	
+
 	return waypoints;
 }
 
@@ -671,103 +667,56 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresser::getPosePressingButton(
 geometry_msgs::msg::Pose::UniquePtr ButtonPresser::apply_transform(geometry_msgs::msg::Pose::SharedPtr pose,
 																   float delta_x, float delta_y, float delta_z,
 																   bool flip) {
-	
-	// these quaternions describe the rotations required to get from the aruco poses to
-	// the end effector pose in such a way that the end effector (last joint) doesn't rotate if not necessary
-	const tf2::Quaternion flip_rotation = tf2::Quaternion(tf2::Vector3(0.0, 1.0, 0.0), M_PI_2);
-	const tf2::Quaternion extra_rotation = tf2::Quaternion(tf2::Vector3(1.0, 0.0, 0.0), -M_PI_2);
-	
-	/*
-	// create tf2 transform from given pose
-	tf2::Transform pose_tf2;
-	pose_tf2.setOrigin(tf2::Vector3(pose->position.x, pose->position.y, pose->position.z));
-	pose_tf2.setRotation(tf2::Quaternion(pose->orientation.x, pose->orientation.y, pose->orientation.z, pose->orientation.w));
 
-	// create tf2 transform from delta pose
-	tf2::Transform delta_tf2;
-	delta_tf2.setOrigin(tf2::Vector3(delta_x, delta_y, delta_z));
-
-	// compute button pose as the composition of the aruco pose and the delta pose
-	tf2::Transform computed_tf2;
-
-	if (flip) {
-		// apply a rotation of 180 degrees around the y axis
-		delta_tf2.setRotation(flip_rotation);
-		computed_tf2 = pose_tf2 * delta_tf2;
-		computed_tf2.setRotation(computed_tf2.getRotation() * extra_rotation);
-	} else {
-		// multiply by the identity rotation
-		tf2::Quaternion identity_rotation(0.0, 0.0, 0.0, 1.0);
-		delta_tf2.setRotation(identity_rotation);
-		computed_tf2 = pose_tf2 * delta_tf2;
-	}
-
-	// align the end effector so that it always points upwards
-	tf2::Quaternion computed_quaternion = computed_tf2.getRotation();
-	computed_quaternion.normalize();
-
-	// get rpy angles from the computed quaternion
-	double roll, pitch, yaw;
-	tf2::Matrix3x3(computed_quaternion).getRPY(roll, pitch, yaw);
-
-	// align the end effector so that the roll angle becomes 0
-	tf2::Quaternion alignment_quaternion = tf2::Quaternion(tf2::Vector3(1.0, 0.0, 0.0), -roll);
-
-	// apply the alignment quaternion to the computed quaternion
-	computed_quaternion = alignment_quaternion * computed_quaternion;
-	computed_tf2.setRotation(computed_quaternion);
-
-	// convert geometry_msgs::msg::Transform to geometry_msgs::msg::Pose
-	geometry_msgs::msg::Pose::UniquePtr transformed_pose = std::make_unique<geometry_msgs::msg::Pose>();
-	transformed_pose->position.x = computed_tf2.getOrigin().getX();
-	transformed_pose->position.y = computed_tf2.getOrigin().getY();
-	transformed_pose->position.z = computed_tf2.getOrigin().getZ();
-	transformed_pose->orientation.x = computed_tf2.getRotation().getX();
-	transformed_pose->orientation.y = computed_tf2.getRotation().getY();
-	transformed_pose->orientation.z = computed_tf2.getRotation().getZ();
-	transformed_pose->orientation.w = computed_tf2.getRotation().getW();
-
-	return transformed_pose;
-	*/
-	
-	
-	geometry_msgs::msg::TransformStamped delta_tf2;
-	delta_tf2.header.frame_id = camera_frame_name;
-	delta_tf2.transform.translation.x = delta_x;
-	delta_tf2.transform.translation.y = delta_y;
-	delta_tf2.transform.translation.z = delta_z;
-
+	// create a new unique pointer for the transformed pose
 	geometry_msgs::msg::Pose::UniquePtr pose_tf2 = std::make_unique<geometry_msgs::msg::Pose>(); // transformed pose
 
+	// convert pose quaternion into rotation matrix
+	tf2::Quaternion pose_quaternion(pose->orientation.x, pose->orientation.y, pose->orientation.z, pose->orientation.w);
+	tf2::Matrix3x3 pose_rotation_matrix(pose_quaternion);
+
+	// get x,y,z vectors from the rotation matrix
+	tf2::Vector3 x_vector = pose_rotation_matrix.getColumn(0);
+	tf2::Vector3 y_vector = pose_rotation_matrix.getColumn(1);
+	tf2::Vector3 z_vector = pose_rotation_matrix.getColumn(2);
+
+	// get delta translation vector by applying delta values to the x,y,z vectors
+	// tf2::Vector3 delta_translation(x_vector.getX() * delta_x, y_vector.getY() * delta_y, z_vector.getZ() * delta_z);
+	tf2::Vector3 delta_translation(x_vector * delta_x + y_vector * delta_y + z_vector * delta_z);
+
+	// apply the delta translation to the pose
+	pose_tf2->position.x = pose->position.x + delta_translation.getX();
+	pose_tf2->position.y = pose->position.y + delta_translation.getY();
+	pose_tf2->position.z = pose->position.z + delta_translation.getZ();
+
 	if (flip) {
-		//TODO: this is not working as expected
-		tf2::Quaternion flip = flip_rotation;// * extra_rotation;
-		tf2::Quaternion pose_quaternion;
-		tf2::fromMsg(pose->orientation, pose_quaternion);
-		flip = pose_quaternion * flip;
-		pose_quaternion = flip * pose_quaternion;
+		// these quaternions describe the rotations required to get from the aruco poses to
+		// the end effector pose in such a way that the end effector (last joint) doesn't rotate if not necessary
+		const tf2::Quaternion flip_rotation = tf2::Quaternion(tf2::Vector3(0.0, 1.0, 0.0), M_PI_2);
+		const tf2::Quaternion extra_rotation = tf2::Quaternion(tf2::Vector3(1.0, 0.0, 0.0), -M_PI_2);
 
-		// apply a rotation of 180 degrees around the y axis
-		//delta_tf2.setRotation(flip);
-		//computed_tf2 = delta_tf2 * pose_tf2;
-		//computed_tf2.setRotation(computed_tf2.getRotation() * extra_rotation);
+		// apply the rotations to the pose quaternion and save the result
+		tf2::Quaternion flip_quat = flip_rotation * extra_rotation;
 
-		delta_tf2.transform.rotation.x = pose_quaternion.x();
-		delta_tf2.transform.rotation.y = pose_quaternion.y();
-		delta_tf2.transform.rotation.z = pose_quaternion.z();
-		delta_tf2.transform.rotation.w = pose_quaternion.w();
-		tf2::doTransform(*pose, *pose_tf2, delta_tf2);
+		flip_quat = pose_quaternion * flip_quat;
+		flip_quat = flip_quat.normalized();
+
+		// TODO: align the end effector so that the roll angle becomes 0
+		//  get roll pitch yaw from the computed quaternion
+		// double roll, pitch, yaw;
+		// tf2::Matrix3x3(flip_quat).getRPY(roll, pitch, yaw);
+		// tf2::Quaternion alignment = tf2::Quaternion(tf2::Vector3(1.0, 0.0, 0.0), -roll);
+		// flip_quat = alignment * flip_quat;
+		// flip_quat = flip_quat.normalized();
+
+		// save the quaternion into the transformed pose
+		pose_tf2->orientation = tf2::toMsg(flip_quat);
+
 	} else {
-		// multiply by the identity rotation
-		tf2::Quaternion identity_rotation(0.0, 0.0, 0.0, 1.0);
-		delta_tf2.transform.rotation.x = identity_rotation.x();
-		delta_tf2.transform.rotation.y = identity_rotation.y();
-		delta_tf2.transform.rotation.z = identity_rotation.z();
-		delta_tf2.transform.rotation.w = identity_rotation.w();
-		tf2::doTransform(*pose, *pose_tf2, delta_tf2);
+		pose_tf2->orientation = pose->orientation;
 	}
+
 	return pose_tf2;
-	
 }
 
 /**
@@ -844,6 +793,7 @@ bool ButtonPresser::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr 
 	RCLCPP_INFO(LOGGER, "Planning and moving to target pose");
 
 	// publish a coordinate axis corresponding to the pose with rviz visual tools
+	visual_tools->setBaseFrame(fixed_base_frame);
 	visual_tools->publishAxisLabeled(target_pose->pose, "target");
 	visual_tools->trigger();
 
@@ -934,8 +884,10 @@ bool ButtonPresser::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr 
 
 	// visualizing the trajectory
 	joint_model_group = move_group->getCurrentState()->getJointModelGroup(PLANNING_GROUP);
-	visual_tools->setBaseFrame(fixed_base_frame);
-	visual_tools->publishTrajectoryLine(plan_motion.trajectory, joint_model_group);
+	auto link_eef = move_group->getCurrentState()->getLinkModel(end_effector_link);
+	//TODO: this trajectory line is not displayed properly in rviz
+	visual_tools->setBaseFrame(plan_motion.trajectory.multi_dof_joint_trajectory.header.frame_id);
+	visual_tools->publishTrajectoryLine(plan_motion.trajectory, link_eef, joint_model_group);
 	visual_tools->trigger();
 
 	if (bool(response)) { // if the plan was successful
@@ -984,8 +936,9 @@ double ButtonPresser::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pos
 																			this->jump_threshold,
 																			cartesian_trajectory_temp,
 																			true, error_codes);
+		RCLCPP_INFO(LOGGER, "Temp Cartesian linear path: %.2f%% completion", completed_proportion_temp * 100.0);
 		// if linear motion has better completion, update the trajectory and the completion proportion
-		if (completed_proportion_temp >= completed_proportion) {
+		if (completed_proportion_temp > completed_proportion) {
 			completed_proportion = completed_proportion_temp;
 			cartesian_trajectory = cartesian_trajectory_temp;
 		}
@@ -993,7 +946,7 @@ double ButtonPresser::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pos
 		attempt++;
 	}
 
-	RCLCPP_INFO(LOGGER, "Cartesian linear path: %.2f%% achieved", completed_proportion * 100.0);
+	RCLCPP_INFO(LOGGER, "Final Cartesian linear path: %.2f%% achieved", completed_proportion * 100.0);
 	// print out the error codes
 	// RCLCPP_INFO(LOGGER, "Error codes: %s", moveit::core::error_code_to_string(*error_codes).c_str());
 

@@ -4,15 +4,15 @@
 // Laboratory: Artificial Intelligence and Robotics Laboratory (AIRLab)
 
 // ROS2 imports
-#include "tf2/exceptions.h"
-#include "tf2_ros/buffer.h"
-#include "tf2_ros/transform_listener.h"
+#include <tf2/exceptions.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 #include <rclcpp/rclcpp.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 // MoveIt2 imports
-#include <moveit/kinematic_constraints/utils.h>
+//#include <moveit/kinematic_constraints/utils.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_interface/planning_interface.h>
 #include <moveit/planning_pipeline/planning_pipeline.h>
@@ -78,8 +78,11 @@ private:
 
 	// position deltas in meters between the aruco marker and the button (assuming sorted markers)
 	//  in order: looking pose, button 1, button 2, button 3
-	const float delta_x[n_btns + 1] = {0.0, 0.02, 0.01, 0.01};
-	const float delta_y[n_btns + 1] = {0.0, 0.13, 0.12, 0.13};
+	// x-axis from left button to right button
+	// y-axis from the buttons to the lights on top
+	// z-axis from the box going inwards towards the camera
+	const float delta_x[n_btns + 1] = {0.0, 0.02, 0.02, 0.02};
+	const float delta_y[n_btns + 1] = {0.0, 0.12, 0.12, 0.11};
 	const float delta_z[n_btns + 1] = {0.15, 0.09, 0.09, 0.09};
 
 	// position vertical axis delta required to go down and press the button (or release it)
@@ -88,21 +91,17 @@ private:
 
 	// robot arm joint values for the looking pose
 	// should be valid for both scenarios where igus is mounted on the mobile robot base or on a table
-	// TODO: set static search joints positions depeding on whether the base has been loaded or not
-	// first joint was 1.0
 	const std::vector<double> search_joints_positions = {-0.5, -1.2, 1.0, 0.0, 1.5, 0.0}; // radians
 
 	// tolerance values for end effector poses
-	const float orientation_tolerance = 0.2; // radians
+	const float orientation_tolerance = 0.1; // radians
 	const float position_tolerance = 0.005;	 // meters
 
 	// planning constants
 	const float max_velocity_scaling_joint_space = 0.5;
-	const float max_velocity_scaling_cartesian_space = 0.3;
-	const float max_acceleration_scaling = 0.3;
+	const float max_velocity_scaling_cartesian_space = 0.5;
+	const float max_acceleration_scaling = 0.2;
 	const short n_max_retries = 3;
-
-	
 
 	// parameters for linear planning movement in cartesian path
 	const double jump_threshold = 0.0; // 0.0 disables jump threshold
@@ -113,8 +112,6 @@ private:
 	rclcpp::Subscription<aruco_interfaces::msg::ArucoMarkers>::SharedPtr aruco_markers_plane_sub;
 	// single aruco marker subscriber
 	rclcpp::Subscription<aruco_interfaces::msg::ArucoMarkers>::SharedPtr aruco_single_marker_sub;
-
-	
 
 	// thread for tracking the goal pose
 	std::thread button_presser_demo_thread;
@@ -136,7 +133,6 @@ private:
 	moveit_visual_tools::MoveItVisualTools *visual_tools;
 
 public:
-	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr test_aruco_marker_pub;
 	/**
 	 * @brief constructor for the button presser class
 	 * @param node_options the node options to use for the button presser node
