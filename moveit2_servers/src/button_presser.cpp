@@ -462,30 +462,6 @@ void ButtonPresser::arucoMarkerCallback(const aruco_interfaces::msg::ArucoMarker
 		return; // skip and wait until all markers are detected
 	}
 
-	// make sure the aruco marker pose is oriented towards the camera frame of reference
-	// rotate the aruco marker pose by 180 degrees around the y axis
-	geometry_msgs::msg::Pose aruco_marker_pose = aruco_markers_array->poses[0];
-	tf2::Quaternion aruco_quaternion(aruco_marker_pose.orientation.x, aruco_marker_pose.orientation.y,
-									 aruco_marker_pose.orientation.z, aruco_marker_pose.orientation.w);
-
-	// check if aruco yaw is negative (directed towards the camera)
-	double roll, pitch, yaw;
-	tf2::Matrix3x3(aruco_quaternion).getRPY(roll, pitch, yaw);
-	if (yaw < 0.0 && yaw >= -M_PI) {
-		// apply a rotation of 180 degrees around the y axis to flip the quaternion
-		tf2::Quaternion flip;
-		flip.setRPY(0.0, M_PI, 0.0);
-		tf2::Quaternion flipped = flip * aruco_quaternion;
-		flipped = flipped.normalize();
-		aruco_marker_pose.orientation.x = flipped.x();
-		aruco_marker_pose.orientation.y = flipped.y();
-		aruco_marker_pose.orientation.z = flipped.z();
-		aruco_marker_pose.orientation.w = flipped.w();
-
-		// save the modified and flipped pose
-		aruco_markers_array->poses[0] = aruco_marker_pose;
-	}
-
 	// transform the pose of the aruco marker with respect to the fixed base frame of reference
 	geometry_msgs::msg::TransformStamped tf_camera_base_msg;
 	try {

@@ -93,7 +93,7 @@ def generate_launch_description():
         executable='aruco_node.py',
         parameters=[{
             "marker_size": 0.2,
-            "aruco_dictionary_id": "DICT_7X7_50",
+            "aruco_dictionary_id": "DICT_4X4_50",
             "use_depth_input": False,
             "image_topic": LaunchConfiguration('image_topic'),
             "depth_image_topic": LaunchConfiguration('depth_image_topic'),

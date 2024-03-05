@@ -83,11 +83,11 @@ private:
 	// z-axis from the box going inwards towards the camera
 	const float delta_x[n_btns + 1] = {0.0, 0.02, 0.02, 0.02};
 	const float delta_y[n_btns + 1] = {0.0, 0.12, 0.12, 0.11};
-	const float delta_z[n_btns + 1] = {0.15, 0.09, 0.09, 0.09};
+	const float delta_z[n_btns + 1] = {0.15, 0.11, 0.09, 0.10};
 
 	// position vertical axis delta required to go down and press the button (or release it)
 	// in order: button 1, button 2, button 3
-	const double delta_pressing[n_btns] = {0.07, 0.07, 0.07};
+	const double delta_pressing[n_btns] = {0.08, 0.08, 0.08};
 
 	// robot arm joint values for the looking pose
 	// should be valid for both scenarios where igus is mounted on the mobile robot base or on a table
@@ -95,7 +95,7 @@ private:
 
 	// tolerance values for end effector poses
 	const float orientation_tolerance = 0.1; // radians
-	const float position_tolerance = 0.005;	 // meters
+	const float position_tolerance = 0.002;	 // meters
 
 	// planning constants
 	const float max_velocity_scaling_joint_space = 0.5;
