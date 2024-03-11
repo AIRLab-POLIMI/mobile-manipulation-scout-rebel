@@ -4,15 +4,15 @@
 // Laboratory: Artificial Intelligence and Robotics Laboratory (AIRLab)
 
 // ROS2 imports
-#include <tf2/exceptions.h>
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
 #include <rclcpp/rclcpp.hpp>
+#include <tf2/exceptions.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 // MoveIt2 imports
-//#include <moveit/kinematic_constraints/utils.h>
+// #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_interface/planning_interface.h>
 #include <moveit/planning_pipeline/planning_pipeline.h>
@@ -65,47 +65,49 @@ private:
 	const int btn_1 = 4, btn_2 = 5, btn_3 = 6;
 
 	// aruco markers array (sorted)
-	std::vector<geometry_msgs::msg::Pose::SharedPtr> aruco_markers;		  // one for each button
-	std::vector<geometry_msgs::msg::Pose::SharedPtr> aruco_markers_saved; // one for each button
+	std::vector<geometry_msgs::msg::Pose::SharedPtr> aruco_markers;		  // markers corrected (plane detection node)
+	std::vector<geometry_msgs::msg::Pose::SharedPtr> aruco_markers_saved; // markers corrected (plane detection node)
 	const int btn_ids[n_btns] = {btn_1, btn_2, btn_3};
 
 	// the big aruco marker used as pose reference for the buttons setup
 	const int reference_marker_id = 16;
-	geometry_msgs::msg::PoseStamped::SharedPtr reference_marker_pose;
+	geometry_msgs::msg::PoseStamped::SharedPtr reference_marker;	   // pose of the reference marker
+	geometry_msgs::msg::PoseStamped::SharedPtr reference_marker_saved; // pose of the reference marker
 
 	// mutex lock for aruco markers array
 	std::mutex aruco_markers_mutex;
+	std::mutex reference_marker_mutex;
 
 	// position deltas in meters between the aruco marker and the button (assuming sorted markers)
 	//  in order: looking pose, button 1, button 2, button 3
 	// x-axis from left button to right button
 	// y-axis from the buttons to the lights on top
 	// z-axis from the box going inwards towards the camera
-	const float delta_x[n_btns + 1] = {0.0, 0.02, 0.02, 0.02};
-	const float delta_y[n_btns + 1] = {0.0, 0.12, 0.12, 0.11};
-	const float delta_z[n_btns + 1] = {0.15, 0.11, 0.09, 0.10};
+	const float delta_x[n_btns + 1] = {0.0, 0.01, 0.0, 0.0};
+	const float delta_y[n_btns + 1] = {0.05, 0.08, 0.07, 0.07};
+	const float delta_z[n_btns + 1] = {0.15, 0.09, 0.08, 0.08};
 
 	// position vertical axis delta required to go down and press the button (or release it)
 	// in order: button 1, button 2, button 3
-	const double delta_pressing[n_btns] = {0.08, 0.08, 0.08};
+	const double delta_pressing[n_btns] = {0.055, 0.075, 0.065};
 
 	// robot arm joint values for the looking pose
 	// should be valid for both scenarios where igus is mounted on the mobile robot base or on a table
-	const std::vector<double> search_joints_positions = {-0.5, -1.2, 1.0, 0.0, 1.5, 0.0}; // radians
+	std::vector<double> search_joints_positions = {-0.5, -1.2, 1.0, 0.0, 1.5, 0.0}; // radians
 
 	// tolerance values for end effector poses
-	const float orientation_tolerance = 0.1; // radians
-	const float position_tolerance = 0.002;	 // meters
+	const float orientation_tolerance = 0.05; // radians
+	const float position_tolerance = 0.001;	 // meters
 
 	// planning constants
 	const float max_velocity_scaling_joint_space = 0.5;
-	const float max_velocity_scaling_cartesian_space = 0.5;
+	const float max_velocity_scaling_cartesian_space = 0.3;
 	const float max_acceleration_scaling = 0.2;
 	const short n_max_retries = 3;
 
 	// parameters for linear planning movement in cartesian path
 	const double jump_threshold = 0.0; // 0.0 disables jump threshold
-	const double eef_step = 0.01;	   // interpolation resolution for linear path planning
+	const double eef_step = 0.005;	   // interpolation resolution for linear path planning
 	const double max_step = 0.05;	   // maximum distance between consecutive waypoints
 
 	// multi aruco markers setup subscriber
@@ -167,12 +169,17 @@ public:
 	 *        Accepts a single marker pose and returns it
 	 * @param aruco_markers_array the array of aruco markers detected by the camera published on /aruco_markers
 	 */
-	void arucoMarkerCallback(const aruco_interfaces::msg::ArucoMarkers::SharedPtr aruco_markers_array);
+	void arucoReferenceMarkerCallback(const aruco_interfaces::msg::ArucoMarkers::SharedPtr aruco_markers_array);
 
 	/**
-	 * @brief waits until the aruco markers have been detected, then saves their positions
+	 * @brief waits until the aruco markers (plane fitting correction) have been detected, then saves their positions
 	 */
-	void saveMarkersPositions();
+	void saveMarkersCorrectedPositions(void);
+
+	/**
+	 * @brief waits until the single aruco marker indicating the location of the aruco markers is found, then saves its position
+	 */
+	void saveReferenceMarkerPosition(void);
 
 	/**
 	 * @brief main thread to press the buttons demonstration
@@ -298,6 +305,11 @@ public:
 	 * @brief Remove the virtual walls from the planning scene
 	 */
 	void removeCollisionWalls(void);
+
+	/**
+	 * @brief Add the virtual walls to the planning scene
+	 */
+	void addCollisionWallsToScene();
 
 	// getter and setter for the ready flags
 	bool isLocationReady(void);

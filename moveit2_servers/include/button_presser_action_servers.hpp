@@ -130,6 +130,9 @@ private:
 	// button presser API object
 	std::shared_ptr<ButtonPresser> button_presser_api_;
 
+	// last searching waypoint pose
+	std::vector<double> last_searched_pose;
+
 	const bool localized_search = true;
 
 	// logger

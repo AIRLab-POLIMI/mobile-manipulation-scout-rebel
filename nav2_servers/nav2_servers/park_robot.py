@@ -123,7 +123,7 @@ class RobotParking(Node):
     FREE_SPACE = 0
 
     # parking algorithm parameters
-    target_radius = 0.45  # meters
+    target_radius = 0.5  # meters
     theta_samples = 15  # number of random samples for x,y coordinates, where theta is the orientation from the target
     phi_samples = 10  # number of random samples for phi orientation, where phi is the orientation delta from theta
     theta_delta_max = np.pi / 8.0  # radians, maximum orientation delta from the normal of the target pose
@@ -641,10 +641,10 @@ class RobotParking(Node):
 
         """
 
-        weight_cost = 0.5
+        weight_cost = 0.15
         weight_distance = 0.15
-        weight_orientation = 0.35
-        max_distance = 14.0  # meters
+        weight_orientation = 0.7
+        max_distance = 16.0  # meters
 
         # zip the target candidates with their costs
         target_candidates = np.concatenate(

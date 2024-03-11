@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
 				auto pose = std::make_shared<geometry_msgs::msg::Pose>(msg->poses[i]);
 
 				// test the apply_transform function
-				geometry_msgs::msg::Pose pose_tf = *node->apply_transform(pose, 0.11, 0.1, 0.1, true);
+				geometry_msgs::msg::Pose pose_tf = *node->apply_transform(pose, 0.02, 0.1, 0.1, true);
 				aruco_msg.poses.push_back(pose_tf);
 
 				// test compute linear waypoints

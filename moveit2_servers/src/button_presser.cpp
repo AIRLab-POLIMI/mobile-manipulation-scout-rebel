@@ -19,7 +19,8 @@ ButtonPresser::ButtonPresser(const rclcpp::NodeOptions &node_options) : Node("bu
 
 	// aruco markers subscriber to aruco_recognition node
 	aruco_single_marker_sub = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
-		this->aruco_single_marker_topic, 10, std::bind(&ButtonPresser::arucoMarkerCallback, this, std::placeholders::_1));
+		this->aruco_single_marker_topic, 10,
+		std::bind(&ButtonPresser::arucoReferenceMarkerCallback, this, std::placeholders::_1));
 
 	ready_location = false;
 	ready_press = false;
@@ -66,9 +67,9 @@ void ButtonPresser::initPlanner() {
 
 	// We can print the name of the reference frame for this robot.
 	root_base_frame = move_group->getPlanningFrame();
-	RCLCPP_INFO(LOGGER, "Planning frame was: %s", root_base_frame.c_str());
+	RCLCPP_INFO(LOGGER, "Planning frame: %s", root_base_frame.c_str());
 	move_group->setPoseReferenceFrame(fixed_base_frame);
-	RCLCPP_INFO(LOGGER, "Planning frame set now: %s", move_group->getPlanningFrame().c_str());
+	RCLCPP_INFO(LOGGER, "Pose reference frame: %s", move_group->getPoseReferenceFrame().c_str());
 
 	// print the name of the end-effector link for this group.
 	// "flange" for simple robot movement, "toucher" for robot arm + camera
@@ -77,8 +78,10 @@ void ButtonPresser::initPlanner() {
 
 	// We can get a list of all the groups in the robot:
 	RCLCPP_INFO(LOGGER, "Available Planning Groups:");
-	std::copy(move_group->getJointModelGroupNames().begin(), move_group->getJointModelGroupNames().end(),
-			  std::ostream_iterator<std::string>(std::cout, ", "));
+	std::vector<std::string> group_names = robot_model_loader->getModel()->getJointModelGroupNames();
+	for (const auto &group_name : group_names) {
+		RCLCPP_INFO(LOGGER, "  %s", group_name.c_str());
+	}
 
 	// We can also use the RobotModelLoader to get a robot model which contains the robot's kinematic information
 	const moveit::core::RobotModelPtr &robot_model = robot_model_loader->getModel();
@@ -222,12 +225,19 @@ void ButtonPresser::moveToSearchingPose() {
  * @return true if the robot has moved to the parked position, false otherwise
  */
 bool ButtonPresser::moveToParkedPosition(void) {
+	// add the collision walls to the planning scene
+	this->addCollisionWallsToScene();
+
 	RCLCPP_INFO(LOGGER, "Moving the robot to predefined parking pose");
 	// using predefined joint space goal position
 	bool valid_motion = this->robotPlanAndMove(parked_joint_positions);
 	if (!valid_motion) {
 		RCLCPP_ERROR(LOGGER, "Could not move to parked position");
 	}
+
+	// remove walls and obstacles from the planning scene
+	this->removeCollisionWalls();
+
 	return valid_motion;
 }
 
@@ -254,6 +264,9 @@ void ButtonPresser::lookAroundForArucoMarkers(bool look_nearby, bool localized_s
 		waypoints = this->computeSearchingWaypoints(look_nearby);
 	}
 
+	// add the collision walls to the planning scene
+	this->addCollisionWallsToScene();
+
 	// iterate over the waypoints and move the robot arm to each of them
 	int waypoints_size = (int)waypoints.size();
 	for (short i = 0; i < waypoints_size; i++) {
@@ -268,14 +281,16 @@ void ButtonPresser::lookAroundForArucoMarkers(bool look_nearby, bool localized_s
 		}
 
 		// wait for 50ms before checking if aruco have been detected
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 		// while the robot is moving, check whether the aruco markers have been detected between each waypoint
 		// if yes, stop the robot and start the demo
 		if ((ready_press && look_nearby) || (ready_location && !look_nearby)) {
 			RCLCPP_INFO(LOGGER, "Aruco markers detected, ending search");
+			search_joints_positions = waypoints[i]; // save the current position as the searching pose
 			break;
 		} else {
+			// reached the end of the waypoints array
 			if (i == waypoints_size - 1) {
 				// if the aruco markers have not been detected, reiterate the waypoints
 				RCLCPP_INFO(LOGGER, "Aruco markers not detected yet, reiterating waypoints search");
@@ -447,10 +462,10 @@ void ButtonPresser::arucoMarkersCorrectedCallback(const aruco_interfaces::msg::A
 
 /**
  * @brief callback for aruco pose estimation node, receiving a single marker pose
- *        Accepts a single marker pose and returns it
+ *        Accepts the reference marker pose and returns it
  * @param aruco_markers_array the array of aruco markers detected by the camera published on /aruco_markers
  */
-void ButtonPresser::arucoMarkerCallback(const aruco_interfaces::msg::ArucoMarkers::SharedPtr aruco_markers_array) {
+void ButtonPresser::arucoReferenceMarkerCallback(const aruco_interfaces::msg::ArucoMarkers::SharedPtr aruco_markers_array) {
 
 	// first check if the markers have all been detected
 	if (aruco_markers_array->poses.size() != 1) {
@@ -470,7 +485,7 @@ void ButtonPresser::arucoMarkerCallback(const aruco_interfaces::msg::ArucoMarker
 		RCLCPP_ERROR(LOGGER, "%s", ex.what());
 		return;
 	}
-
+	
 	geometry_msgs::msg::Pose aruco_marker_tf_pose;
 	// assign the markers to the correct array position based on their id
 
@@ -483,15 +498,20 @@ void ButtonPresser::arucoMarkerCallback(const aruco_interfaces::msg::ArucoMarker
 	aruco_marker_tf_pose_stamped->header.frame_id = fixed_base_frame;
 	aruco_marker_tf_pose_stamped->header.stamp = this->now();
 
-	this->reference_marker_pose = aruco_marker_tf_pose_stamped;
+	{
+		// acquire reference aruco marker mutex lock
+		std::lock_guard<std::mutex> lock(reference_marker_mutex);
+		// save the reference aruco marker
+		this->reference_marker = aruco_marker_tf_pose_stamped;
+	}
 
 	ready_location = true;
 }
 
 /**
- * @brief waits until the aruco markers have been detected, then saves their positions
+ * @brief waits until the aruco markers (plane fitting correction) have been detected, then saves their positions
  */
-void ButtonPresser::saveMarkersPositions() {
+void ButtonPresser::saveMarkersCorrectedPositions() {
 	while (rclcpp::ok()) {
 		if (ready_press) { // starts the demo
 			RCLCPP_INFO(LOGGER, "Button setup detected, demo can start");
@@ -514,13 +534,36 @@ void ButtonPresser::saveMarkersPositions() {
 }
 
 /**
+ * @brief waits until the single aruco marker indicating the location of the aruco markers is found, then saves its position
+ */
+void ButtonPresser::saveReferenceMarkerPosition() {
+	while (rclcpp::ok()) {
+		if (ready_location) { // starts the demo
+			RCLCPP_INFO(LOGGER, "Single aruco marker found, saving its position");
+
+			// acquire aruco reference marker mutex
+			{ // scope for the lock
+				std::lock_guard<std::mutex> lock(reference_marker_mutex);
+
+				// copy and save reference aruco marker
+				reference_marker_saved = std::make_shared<geometry_msgs::msg::PoseStamped>(*reference_marker);
+			}
+			return;
+		} else {
+			// wait for 50ms before checking if aruco have been detected
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		}
+	}
+}
+
+/**
  * @brief Main thread function for the button presser demo
  */
 void ButtonPresser::buttonPresserDemoThread() {
 	RCLCPP_INFO(LOGGER, "Starting button presser demo thread");
 
 	// wait until the aruco markers have been detected, then save their positions
-	this->saveMarkersPositions();
+	this->saveMarkersCorrectedPositions();
 
 	// remove walls and obstacles from the planning scene
 	this->removeCollisionWalls();
@@ -580,8 +623,16 @@ void ButtonPresser::buttonPresserDemoThread() {
 	this->robotPlanAndMove(linear_waypoints_3_reverse);
 
 	// move back to the looking pose
-	RCLCPP_INFO(LOGGER, "Returning to looking pose and ending demo");
+	RCLCPP_INFO(LOGGER, "Returning to looking pose");
 	this->robotPlanAndMove(looking_pose);
+
+	// move back to the last searched position
+	RCLCPP_INFO(LOGGER, "Returning to last searched position");
+	this->moveToSearchingPose();
+
+	// move to the parked position
+	RCLCPP_INFO(LOGGER, "Moving to parked position and ending demo");
+	this->moveToParkedPosition();
 
 	// end of demo
 	RCLCPP_INFO(LOGGER, "Ending button presser demo thread");
@@ -861,7 +912,6 @@ bool ButtonPresser::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr 
 	// visualizing the trajectory
 	joint_model_group = move_group->getCurrentState()->getJointModelGroup(PLANNING_GROUP);
 	auto link_eef = move_group->getCurrentState()->getLinkModel(end_effector_link);
-	//TODO: this trajectory line is not displayed properly in rviz
 	visual_tools->setBaseFrame(plan_motion.trajectory.multi_dof_joint_trajectory.header.frame_id);
 	visual_tools->publishTrajectoryLine(plan_motion.trajectory, link_eef, joint_model_group);
 	visual_tools->trigger();
@@ -962,12 +1012,6 @@ bool ButtonPresser::robotPlanAndMove(std::vector<double> joint_space_goal) {
 	// optionally limit accelerations and velocity scaling
 	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_joint_space);
 	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
-
-	// instantiate a set of collision walls acting as workspace bounds
-	std::vector<moveit_msgs::msg::CollisionObject> collision_walls = this->createCollisionWalls();
-	// add collision walls to the planning scene
-	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-	planning_scene_interface.addCollisionObjects(collision_walls);
 
 	bool valid_motion = move_group->setJointValueTarget(goal_state);
 	if (!valid_motion) {
@@ -1101,6 +1145,17 @@ std::vector<moveit_msgs::msg::CollisionObject> ButtonPresser::createCollisionWal
 }
 
 /**
+ * @brief Add the virtual walls to the planning scene
+ */
+void ButtonPresser::addCollisionWallsToScene() {
+	// instantiate a set of collision walls acting as workspace bounds
+	std::vector<moveit_msgs::msg::CollisionObject> collision_walls = this->createCollisionWalls();
+	// add collision walls to the planning scene
+	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+	planning_scene_interface.addCollisionObjects(collision_walls);
+}
+
+/**
  * @brief Remove the virtual walls from the planning scene
  */
 void ButtonPresser::removeCollisionWalls() {
@@ -1126,7 +1181,7 @@ bool ButtonPresser::isLocationReady() {
 
 // getter for the reference marker pose
 geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresser::getReferenceMarkerPose() {
-	return this->reference_marker_pose;
+	return this->reference_marker_saved;
 }
 
 // getter for delta_pressing array

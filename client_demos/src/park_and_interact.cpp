@@ -461,7 +461,7 @@ void ParkAndInteract::buttonPresserFeedbackCallback(GoalHandleButtonPresser::Sha
 void ParkAndInteract::buttonPresserResultCallback(const GoalHandleButtonPresser::WrappedResult &result) {
 	int n_goals_completed = result.result->n_goals_completed;
 	float percent_completion = result.result->percent_completion;
-	RCLCPP_INFO(logger_, "Result: %d goals completed out of 11; %.2f percent completion in linear motions",
+	RCLCPP_INFO(logger_, "Result: %d goals completed out of 13; %.2f percent completion in linear motions",
 				n_goals_completed, percent_completion);
 }
 

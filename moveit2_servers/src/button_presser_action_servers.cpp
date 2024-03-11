@@ -131,6 +131,16 @@ void ButtonPresserActionServers::execute_find_callback(const std::shared_ptr<Goa
 	// sets the button presser API to not ready so that the next action (button press) can be executed
 	button_presser_api_->setReadyToPress(false);
 
+	// rotate target found pose such that its x-axis is swapped with the z-axis
+	tf2::Quaternion align_with_z_axis;
+	align_with_z_axis.setRPY(0, -M_PI / 2, 0);
+	tf2::Quaternion target_orientation;
+	tf2::fromMsg(target_found->pose.orientation, target_orientation);
+
+	// rotate the target pose to align with the z-axis
+	tf2::Quaternion new_orientation = target_orientation * align_with_z_axis;
+	target_found->pose.orientation = tf2::toMsg(new_orientation);
+
 	// return the position of the found aruco marker as the result of the goal
 	auto result = std::make_shared<ButtonFindAction::Result>();
 	result->target = *target_found;
@@ -161,6 +171,9 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 		waypoints = this->button_presser_api_->computeSearchingWaypoints(true);
 	}
 
+	// add the collision walls to the planning scene
+	this->button_presser_api_->addCollisionWallsToScene();
+
 	// iterate over the waypoints and move the robot arm to each of them
 	int waypoints_size = (int)waypoints.size();
 	for (int i = 0, waypoint_count = 0; i < waypoints_size; i++, waypoint_count++) {
@@ -180,12 +193,13 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 		}
 
 		// wait for 50ms before checking if aruco have been detected
-		std::this_thread::sleep_for(std::chrono::milliseconds(25));
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 		// while the robot is moving, check whether the aruco markers have been detected between each waypoint
 		// if yes, stop the robot and start the demo
 		if (this->button_presser_api_->isReadyToPress()) {
 			RCLCPP_INFO(LOGGER, "Aruco markers detected, ending search");
+			last_searched_pose = waypoints[i];
 
 			// update feedback status
 			auto feedback = std::make_shared<ButtonPressAction::Feedback>();
@@ -221,7 +235,7 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	goal_handle->publish_feedback(feedback);
 
 	// save the current markers positions
-	this->button_presser_api_->saveMarkersPositions();
+	this->button_presser_api_->saveMarkersCorrectedPositions();
 
 	// remove collision walls from the planning scene
 	this->button_presser_api_->removeCollisionWalls();
@@ -351,7 +365,7 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	}
 
 	// move back to the looking pose
-	status = "Returning to looking pose and ending demo";
+	status = "Returning to looking pose ";
 	RCLCPP_INFO(LOGGER, status.c_str());
 	// update feedback status
 	feedback->status = status;
@@ -360,6 +374,19 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// move to the predefined looking pose
 	bool move11 = this->button_presser_api_->robotPlanAndMove(looking_pose);
 	if (move11) {
+		count_completed_motions++;
+	}
+
+	// move to the parked position
+	RCLCPP_INFO(LOGGER, "Moving to parked position and ending demo");
+	// move to the last search waypoint
+	bool move12 = this->button_presser_api_->robotPlanAndMove(last_searched_pose);
+	if (move12) {
+		count_completed_motions++;
+	}
+
+	bool move13 = this->button_presser_api_->moveToParkedPosition();
+	if (move13) {
 		count_completed_motions++;
 	}
 
@@ -386,6 +413,9 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarFo
 	std::vector<std::vector<double>> waypoints;
 	waypoints = this->button_presser_api_->computeSearchingWaypoints(false);
 
+	// add the collision walls to the planning scene
+	this->button_presser_api_->addCollisionWallsToScene();
+
 	// iterate over the waypoints and move the robot arm to each of them
 	int waypoints_size = (int)waypoints.size();
 	for (int i = 0, waypoint_count = 0; i < waypoints_size; i++, waypoint_count++) {
@@ -407,8 +437,8 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarFo
 		// while the robot is moving, check whether the aruco markers have been detected between each waypoint
 		// if yes, stop the robot and start the demo
 
-		// wait for 50ms before checking if aruco have been detected
-		std::this_thread::sleep_for(std::chrono::milliseconds(25));
+		// wait for 100ms before checking if aruco have been detected
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 		// check whether the aruco markers have been detected
 		if (this->button_presser_api_->isLocationReady()) {
@@ -430,6 +460,8 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarFo
 			}
 		}
 	}
+
+	this->button_presser_api_->saveReferenceMarkerPosition();
 
 	return this->button_presser_api_->getReferenceMarkerPose();
 }
