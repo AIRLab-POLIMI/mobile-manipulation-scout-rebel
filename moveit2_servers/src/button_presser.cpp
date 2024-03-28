@@ -7,9 +7,10 @@
 
 /**
  * @brief constructor for the button presser class
+ * @param moveit2_api the moveit2 apis node object to use for accessing high level moveit2 functionalities
  * @param node_options the node options to use for the button presser node
  */
-ButtonPresser::ButtonPresser(const rclcpp::NodeOptions &node_options) : Node("button_presser_node", node_options) {
+ButtonPresser::ButtonPresser(std::shared_ptr<MoveIt2APIs> moveit2_api, const rclcpp::NodeOptions &node_options) : Node("button_presser_node", node_options) {
 	RCLCPP_INFO(LOGGER, "Starting button presser demo");
 
 	// aruco markers subscriber to multi_aruco_plane_detection node
@@ -29,179 +30,7 @@ ButtonPresser::ButtonPresser(const rclcpp::NodeOptions &node_options) : Node("bu
 	aruco_markers = std::vector<geometry_msgs::msg::Pose::SharedPtr>(n_btns);
 	aruco_markers_saved = std::vector<geometry_msgs::msg::Pose::SharedPtr>(n_btns);
 
-	// loads the camera frame name from the aruco detector config file
-	// this->declare_parameter("camera_frame", rclcpp::PARAMETER_STRING);
-	camera_frame_name = this->get_parameter("camera_frame").as_string();
-	if (camera_frame_name != std::string()) {
-		RCLCPP_INFO(LOGGER, "Value of camera frame: %s", camera_frame_name.c_str());
-	} else {
-		RCLCPP_ERROR(LOGGER, "Failed to get camera frame parameter from config file");
-	}
-
-	// load base = true if the robotic arm is mounted on the mobile robot base, false if it's mounted on a table
-	load_base_arg = this->get_parameter("load_base").as_bool();
-
-	tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-	tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-}
-
-/**
- * @brief initializes move_group and planning_scene interfaces, using the MoveIt2 library APIs
- */
-void ButtonPresser::initPlanner() {
-	button_presser_node = shared_from_this();
-
-	// Setting up to start using a planning pipeline is pretty easy. Before we can load the planner, we need two objects,
-	// a RobotModel and a PlanningScene.
-	//
-	// We will start by instantiating a RobotModelLoader object, which will look up the robot description on the ROS
-	// parameter server and construct a RobotModel for us to use.
-
-	robot_model_loader::RobotModelLoaderPtr robot_model_loader(
-		new robot_model_loader::RobotModelLoader(button_presser_node, "robot_description"));
-
-	move_group = new moveit::planning_interface::MoveGroupInterface(button_presser_node, PLANNING_GROUP);
-
-	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-	// planning_scene_interface_ = &planning_scene_interface;
-
-	// We can print the name of the reference frame for this robot.
-	root_base_frame = move_group->getPlanningFrame();
-	RCLCPP_INFO(LOGGER, "Planning frame: %s", root_base_frame.c_str());
-	move_group->setPoseReferenceFrame(fixed_base_frame);
-	RCLCPP_INFO(LOGGER, "Pose reference frame: %s", move_group->getPoseReferenceFrame().c_str());
-
-	// print the name of the end-effector link for this group.
-	// "flange" for simple robot movement, "toucher" for robot arm + camera
-	end_effector_link = move_group->getEndEffectorLink();
-	RCLCPP_INFO(LOGGER, "End effector link: %s", end_effector_link.c_str());
-
-	// We can get a list of all the groups in the robot:
-	RCLCPP_INFO(LOGGER, "Available Planning Groups:");
-	std::vector<std::string> group_names = robot_model_loader->getModel()->getJointModelGroupNames();
-	for (const auto &group_name : group_names) {
-		RCLCPP_INFO(LOGGER, "  %s", group_name.c_str());
-	}
-
-	// We can also use the RobotModelLoader to get a robot model which contains the robot's kinematic information
-	const moveit::core::RobotModelPtr &robot_model = robot_model_loader->getModel();
-
-	// Create a RobotState and JointModelGroup to keep track of the current robot pose and planning group
-	moveit::core::RobotStatePtr robot_state(new moveit::core::RobotState(robot_model));
-
-	move_group->setStartState(*robot_state);
-
-	// Set the number of planning attempts to a very high number to guarantee maximum
-	// probability of finding a valid plan to be executed
-	move_group->setNumPlanningAttempts(150);
-
-	// Create a JointModelGroup to keep track of the current robot pose and planning group. The Joint Model
-	// group is useful for dealing with one set of joints at a time such as a left arm or a end effector
-	joint_model_group = robot_state->getJointModelGroup(PLANNING_GROUP);
-
-	std::vector<const moveit::core::LinkModel *> tips;
-	bool check_tips = joint_model_group->getEndEffectorTips(tips);
-	if (check_tips) {
-		RCLCPP_INFO(LOGGER, "End effector tips:");
-		for (const auto &tip : tips) {
-			RCLCPP_INFO(LOGGER, "Tip: %s", tip->getName().c_str());
-		}
-	} else {
-		RCLCPP_ERROR(LOGGER, "Could not get end effector tips");
-	}
-
-	// get the default parked group state joints values
-	std::map<std::string, double> group_state_map = std::map<std::string, double>();
-	joint_model_group->getVariableDefaultPositions("parked", group_state_map);
-	parked_joint_positions = std::vector<double>(group_state_map.size());
-	std::string joint_names_values = "Parked joint positions: ";
-	for (const auto &pair : group_state_map) {
-		// assumes that the joints are ordered in the same way as the move_group interface does
-		parked_joint_positions[joint_model_group->getVariableGroupIndex(pair.first)] = pair.second;
-		joint_names_values += pair.first + ": " + std::to_string(pair.second) + ", ";
-	}
-	RCLCPP_INFO(LOGGER, "%s", joint_names_values.c_str());
-
-	// Using the RobotModel we can construct a PlanningScene that maintains the state of the world (including the robot).
-	planning_scene = new planning_scene::PlanningScene(robot_model);
-
-	RCLCPP_INFO(LOGGER, "Planner and utilities initialized");
-
-	loadPlanner(robot_model);
-}
-
-/**
- * @brief Load the planner plugin and initialize the planner instance
- * @param robot_model the robot model object to use for the planner instance
- */
-void ButtonPresser::loadPlanner(const moveit::core::RobotModelPtr &robot_model) {
-	// We will now construct a loader to load a planner, by name.
-	// Note that we are using the ROS pluginlib library here.
-	std::unique_ptr<pluginlib::ClassLoader<planning_interface::PlannerManager>> planner_plugin_loader;
-
-	std::string planner_plugin_name;
-
-	// We will get the name of planning plugin we want to load
-	// from the ROS parameter server, and then load the planner
-	// making sure to catch all exceptions.
-	if (!button_presser_node->get_parameter("planning_plugin", planner_plugin_name))
-		RCLCPP_FATAL(LOGGER, "Could not find planner plugin name");
-	try {
-		planner_plugin_loader.reset(new pluginlib::ClassLoader<planning_interface::PlannerManager>(
-			"moveit_core", "planning_interface::PlannerManager"));
-	} catch (pluginlib::PluginlibException &ex) {
-		RCLCPP_FATAL(LOGGER, "Exception while creating planning plugin loader %s", ex.what());
-	}
-	try {
-		planner_instance.reset(planner_plugin_loader->createUnmanagedInstance(planner_plugin_name));
-		if (!planner_instance->initialize(robot_model, button_presser_node, button_presser_node->get_namespace())) {
-			RCLCPP_FATAL(LOGGER, "Could not initialize planner instance");
-		}
-		RCLCPP_INFO(LOGGER, "Using planning interface '%s'", planner_instance->getDescription().c_str());
-	} catch (pluginlib::PluginlibException &ex) {
-		const std::vector<std::string> &classes = planner_plugin_loader->getDeclaredClasses();
-		std::stringstream ss;
-		for (const auto &cls : classes)
-			ss << cls << " ";
-		RCLCPP_ERROR(LOGGER, "Exception while loading planner '%s': %s\nAvailable plugins: %s", planner_plugin_name.c_str(),
-					 ex.what(), ss.str().c_str());
-	}
-
-	RCLCPP_INFO(LOGGER, "Loaded planner and planning plugin");
-}
-
-/**
- * @brief Initialize rviz visual tools for text and markers visualization
- */
-void ButtonPresser::initRvizVisualTools() {
-	// Visualization
-	// ^^^^^^^^^^^^^
-	// The package MoveItVisualTools provides many capabilities for visualizing objects, robots,
-	// and trajectories in RViz as well as debugging tools such as step-by-step introspection of a script.
-	namespace rvt = rviz_visual_tools;
-	// @param node - base frame - markers topic - robot model
-	visual_tools = new moveit_visual_tools::MoveItVisualTools(button_presser_node, fixed_base_frame, "/rviz_visual_tools", move_group->getRobotModel());
-
-	// extra options
-	visual_tools->setPlanningSceneTopic("/move_group/monitored_planning_scene");
-	visual_tools->loadPlanningSceneMonitor();
-	visual_tools->enableBatchPublishing();
-	visual_tools->setBaseFrame(fixed_base_frame);
-	visual_tools->deleteAllMarkers();
-
-	// Remote control is an introspection tool that allows users to step through a high level script
-	// via buttons and keyboard shortcuts in RViz
-	visual_tools->loadRemoteControl();
-
-	// RViz provides many types of markers, in this demo we will use text, cylinders, and spheres
-	Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
-	text_pose.translation().z() = 1.0;
-	visual_tools->publishText(text_pose, "Button Presser Demo", rvt::WHITE, rvt::XXLARGE);
-
-	// Batch publishing is used to reduce the number of messages being sent to RViz for large visualizations
-	visual_tools->trigger();
-
-	RCLCPP_INFO(LOGGER, "Loaded rviz visual tools");
+	this->moveit2_api = moveit2_api;
 }
 
 /**
@@ -214,7 +43,7 @@ void ButtonPresser::moveToSearchingPose() {
 	RCLCPP_INFO(LOGGER, "Moving the robot to searching pose");
 
 	// using predefined joint space goal position
-	bool valid_motion = this->robotPlanAndMove(search_joints_positions);
+	bool valid_motion = moveit2_api->robotPlanAndMove(search_joints_positions);
 	if (!valid_motion) {
 		RCLCPP_ERROR(LOGGER, "Could not move to static search position");
 	}
@@ -226,17 +55,17 @@ void ButtonPresser::moveToSearchingPose() {
  */
 bool ButtonPresser::moveToParkedPosition(void) {
 	// add the collision walls to the planning scene
-	this->addCollisionWallsToScene();
+	moveit2_api->addCollisionWallsToScene();
 
 	RCLCPP_INFO(LOGGER, "Moving the robot to predefined parking pose");
 	// using predefined joint space goal position
-	bool valid_motion = this->robotPlanAndMove(parked_joint_positions);
+	bool valid_motion = moveit2_api->robotPlanAndMove(moveit2_api->getParkedJointPositions());
 	if (!valid_motion) {
 		RCLCPP_ERROR(LOGGER, "Could not move to parked position");
 	}
 
 	// remove walls and obstacles from the planning scene
-	this->removeCollisionWalls();
+	moveit2_api->removeCollisionWalls();
 
 	return valid_motion;
 }
@@ -265,7 +94,7 @@ void ButtonPresser::lookAroundForArucoMarkers(bool look_nearby, bool localized_s
 	}
 
 	// add the collision walls to the planning scene
-	this->addCollisionWallsToScene();
+	moveit2_api->addCollisionWallsToScene();
 
 	// iterate over the waypoints and move the robot arm to each of them
 	int waypoints_size = (int)waypoints.size();
@@ -274,7 +103,7 @@ void ButtonPresser::lookAroundForArucoMarkers(bool look_nearby, bool localized_s
 		RCLCPP_INFO(LOGGER, "Moving to waypoint %d", i);
 
 		// move the robot arm to the current waypoint
-		bool valid_motion = this->robotPlanAndMove(waypoints[i]);
+		bool valid_motion = moveit2_api->robotPlanAndMove(waypoints[i]);
 		if (!valid_motion) {
 			RCLCPP_ERROR(LOGGER, "Could not move to waypoint %d", i);
 			continue; // attempt planning to next waypoint and skip this one
@@ -326,7 +155,7 @@ std::vector<std::vector<double>> ButtonPresser::computeSearchingWaypoints(bool l
 
 	} else {
 		// first layer of waypoints is skipped because it is used only for distant aruco markers
-		if (this->load_base_arg) {
+		if (moveit2_api->getLoadBaseArg()) {
 			// limit robot movement range when the robotic arm is mounted on the mobile robot base
 			range_min = -1.5;
 			range_max = 3.1;
@@ -338,7 +167,7 @@ std::vector<std::vector<double>> ButtonPresser::computeSearchingWaypoints(bool l
 			waypoints.push_back(pos);
 		}
 
-		if (load_base_arg) {
+		if (moveit2_api->getLoadBaseArg()) {
 			// adds extra segment to cover maximum angle in the second and third search layers
 			for (float i = extra_segment_max; i >= extra_segment_min; i -= 0.2) {
 				std::vector<double> pos = {i, -0.4, 0.75, 0.0, 1.55, 0.0};
@@ -430,14 +259,8 @@ void ButtonPresser::arucoMarkersCorrectedCallback(const aruco_interfaces::msg::A
 	}
 
 	// transform the poses of the aruco markers with respect to the fixed base frame of reference
-	geometry_msgs::msg::TransformStamped tf_camera_base_msg;
-	try {
-		tf_camera_base_msg = tf_buffer_->lookupTransform(fixed_base_frame, camera_frame_name, tf2::TimePointZero);
-	} catch (const tf2::TransformException &ex) {
-		RCLCPP_ERROR(LOGGER, "%s", ex.what());
-		return;
-	}
-
+	geometry_msgs::msg::TransformStamped tf_camera_base_msg = *moveit2_api->getTFfromBaseToCamera();
+	
 	geometry_msgs::msg::Pose aruco_marker_tf_pose;
 	// assign the markers to the correct array position based on their id
 	for (int i = 0; i < n_btns; i++) {
@@ -477,15 +300,9 @@ void ButtonPresser::arucoReferenceMarkerCallback(const aruco_interfaces::msg::Ar
 		return; // skip and wait until all markers are detected
 	}
 
-	// transform the pose of the aruco marker with respect to the fixed base frame of reference
-	geometry_msgs::msg::TransformStamped tf_camera_base_msg;
-	try {
-		tf_camera_base_msg = tf_buffer_->lookupTransform(fixed_base_frame, camera_frame_name, tf2::TimePointZero);
-	} catch (const tf2::TransformException &ex) {
-		RCLCPP_ERROR(LOGGER, "%s", ex.what());
-		return;
-	}
-	
+	// transform the poses of the aruco markers with respect to the fixed base frame of reference
+	geometry_msgs::msg::TransformStamped tf_camera_base_msg = *moveit2_api->getTFfromBaseToCamera();
+
 	geometry_msgs::msg::Pose aruco_marker_tf_pose;
 	// assign the markers to the correct array position based on their id
 
@@ -495,7 +312,7 @@ void ButtonPresser::arucoReferenceMarkerCallback(const aruco_interfaces::msg::Ar
 	// create a PoseStamped message to return with the aruco marker pose estimated
 	geometry_msgs::msg::PoseStamped::SharedPtr aruco_marker_tf_pose_stamped = std::make_shared<geometry_msgs::msg::PoseStamped>();
 	aruco_marker_tf_pose_stamped->pose = aruco_marker_tf_pose;
-	aruco_marker_tf_pose_stamped->header.frame_id = fixed_base_frame;
+	aruco_marker_tf_pose_stamped->header.frame_id = moveit2_api->fixed_base_frame;
 	aruco_marker_tf_pose_stamped->header.stamp = this->now();
 
 	{
@@ -566,65 +383,65 @@ void ButtonPresser::buttonPresserDemoThread() {
 	this->saveMarkersCorrectedPositions();
 
 	// remove walls and obstacles from the planning scene
-	this->removeCollisionWalls();
+	moveit2_api->removeCollisionWalls();
 
 	RCLCPP_INFO(LOGGER, "Moving to looking position");
 	// first move to the predefined looking pose
 	geometry_msgs::msg::PoseStamped::SharedPtr looking_pose = this->computeLookingPose();
-	this->robotPlanAndMove(looking_pose);
+	moveit2_api->robotPlanAndMove(looking_pose);
 
 	// then press the buttons in order
 	RCLCPP_INFO(LOGGER, "Pressing button 1 ...");
 	// button 1
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_1 = this->getPoseAboveButton(1);
-	this->robotPlanAndMove(pose_above_button_1);
+	moveit2_api->robotPlanAndMove(pose_above_button_1);
 
 	// compute linear waypoints to press the button
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn1 = this->computeLinearWaypoints(
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn1 = moveit2_api->computeLinearWaypoints(
 		std::make_shared<geometry_msgs::msg::Pose>(pose_above_button_1->pose), delta_pressing[0], 0.0, 0.0);
 
 	// move the robot arm along the linear waypoints --> descend to press the button
-	this->robotPlanAndMove(linear_waypoints_btn1);
+	moveit2_api->robotPlanAndMove(linear_waypoints_btn1);
 
 	// ascent to release the button --> linear motion from the reached position to the starting position
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_1_reverse = this->computeLinearWaypoints(-delta_pressing[0], 0.0, 0.0);
-	this->robotPlanAndMove(linear_waypoints_1_reverse);
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_1_reverse = moveit2_api->computeLinearWaypoints(-delta_pressing[0], 0.0, 0.0);
+	moveit2_api->robotPlanAndMove(linear_waypoints_1_reverse);
 
 	// button 2
 	RCLCPP_INFO(LOGGER, "Pressing button 2 ...");
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_2 = this->getPoseAboveButton(2);
-	this->robotPlanAndMove(pose_above_button_2);
+	moveit2_api->robotPlanAndMove(pose_above_button_2);
 
 	// compute linear waypoints to press the button
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn2 = this->computeLinearWaypoints(
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn2 = moveit2_api->computeLinearWaypoints(
 		std::make_shared<geometry_msgs::msg::Pose>(pose_above_button_2->pose), delta_pressing[1], 0.0, 0.0);
 
 	// move the robot arm along the linear waypoints --> descend to press the button
-	this->robotPlanAndMove(linear_waypoints_btn2);
+	moveit2_api->robotPlanAndMove(linear_waypoints_btn2);
 
 	// ascent to release the button --> linear motion from the reached position to the starting position
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_2_reverse = this->computeLinearWaypoints(-delta_pressing[1], 0.0, 0.0);
-	this->robotPlanAndMove(linear_waypoints_2_reverse);
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_2_reverse = moveit2_api->computeLinearWaypoints(-delta_pressing[1], 0.0, 0.0);
+	moveit2_api->robotPlanAndMove(linear_waypoints_2_reverse);
 
 	// button 3
 	RCLCPP_INFO(LOGGER, "Pressing button 3 ...");
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_3 = this->getPoseAboveButton(3);
-	this->robotPlanAndMove(pose_above_button_3);
+	moveit2_api->robotPlanAndMove(pose_above_button_3);
 
 	// compute linear waypoints to press the button
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn3 = this->computeLinearWaypoints(
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn3 = moveit2_api->computeLinearWaypoints(
 		std::make_shared<geometry_msgs::msg::Pose>(pose_above_button_3->pose), delta_pressing[2], 0.0, 0.0);
 
 	// move the robot arm along the linear waypoints --> descend to press the button
-	this->robotPlanAndMove(linear_waypoints_btn3);
+	moveit2_api->robotPlanAndMove(linear_waypoints_btn3);
 
 	// ascent to release the button --> linear motion from the reached position to the starting position
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_3_reverse = this->computeLinearWaypoints(-delta_pressing[2], 0.0, 0.0);
-	this->robotPlanAndMove(linear_waypoints_3_reverse);
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_3_reverse = moveit2_api->computeLinearWaypoints(-delta_pressing[2], 0.0, 0.0);
+	moveit2_api->robotPlanAndMove(linear_waypoints_3_reverse);
 
 	// move back to the looking pose
 	RCLCPP_INFO(LOGGER, "Returning to looking pose");
-	this->robotPlanAndMove(looking_pose);
+	moveit2_api->robotPlanAndMove(looking_pose);
 
 	// move back to the last searched position
 	RCLCPP_INFO(LOGGER, "Returning to last searched position");
@@ -645,8 +462,8 @@ void ButtonPresser::buttonPresserDemoThread() {
 geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresser::computeLookingPose() {
 	// apply transform on the aruco marker in the middle, with a flip rotation to point towards it
 	geometry_msgs::msg::PoseStamped::SharedPtr looking_pose = std::make_shared<geometry_msgs::msg::PoseStamped>();
-	looking_pose->pose = *this->apply_transform(aruco_markers_saved[1], delta_x[0], delta_y[0], delta_z[0], true);
-	looking_pose->header.frame_id = fixed_base_frame;
+	looking_pose->pose = *moveit2_api->apply_transform(aruco_markers_saved[1], delta_x[0], delta_y[0], delta_z[0], true);
+	looking_pose->header.frame_id = moveit2_api->fixed_base_frame;
 	looking_pose->header.stamp = this->now();
 	return looking_pose;
 }
@@ -659,9 +476,9 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresser::computeLookingPose() {
 geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresser::getPoseAboveButton(const int button_id) {
 	// apply transform from the aruco marker to the button, with a flip rotation to point towards it
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button = std::make_shared<geometry_msgs::msg::PoseStamped>();
-	pose_above_button->pose = *this->apply_transform(
+	pose_above_button->pose = *moveit2_api->apply_transform(
 		aruco_markers_saved[button_id - 1], delta_x[button_id], delta_y[button_id], delta_z[button_id], true);
-	pose_above_button->header.frame_id = fixed_base_frame;
+	pose_above_button->header.frame_id = moveit2_api->fixed_base_frame;
 	pose_above_button->header.stamp = this->now();
 	return pose_above_button;
 }
@@ -677,491 +494,10 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresser::getPosePressingButton(
 	// apply transform from the pose above the button to the pose pressing the button
 	// changes only the x coordinate, without any rotation changes, straight movement
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_pressing_button = std::make_shared<geometry_msgs::msg::PoseStamped>();
-	pose_pressing_button->pose = *this->apply_transform(pose_above_button, delta_pressing[button_id - 1], 0.0, 0.0, false);
-	pose_pressing_button->header.frame_id = fixed_base_frame;
+	pose_pressing_button->pose = *moveit2_api->apply_transform(pose_above_button, delta_pressing[button_id - 1], 0.0, 0.0, false);
+	pose_pressing_button->header.frame_id = moveit2_api->fixed_base_frame;
 	pose_pressing_button->header.stamp = this->now();
 	return pose_pressing_button;
-}
-
-/**
- * @param pose the pose of the aruco marker or a button
- * @param delta_x the delta x to apply to the pose
- * @param delta_y the delta y to apply to the pose
- * @param delta_z the delta z to apply to the pose
- * @param flip whether to apply a rotation of 180 degrees around the y axis or not
- * @brief Apply a transform to the pose of the aruco marker or a button
- */
-geometry_msgs::msg::Pose::UniquePtr ButtonPresser::apply_transform(geometry_msgs::msg::Pose::SharedPtr pose,
-																   float delta_x, float delta_y, float delta_z,
-																   bool flip) {
-
-	// create a new unique pointer for the transformed pose
-	geometry_msgs::msg::Pose::UniquePtr pose_tf2 = std::make_unique<geometry_msgs::msg::Pose>(); // transformed pose
-
-	// convert pose quaternion into rotation matrix
-	tf2::Quaternion pose_quaternion(pose->orientation.x, pose->orientation.y, pose->orientation.z, pose->orientation.w);
-	tf2::Matrix3x3 pose_rotation_matrix(pose_quaternion);
-
-	// get x,y,z vectors from the rotation matrix
-	tf2::Vector3 x_vector = pose_rotation_matrix.getColumn(0);
-	tf2::Vector3 y_vector = pose_rotation_matrix.getColumn(1);
-	tf2::Vector3 z_vector = pose_rotation_matrix.getColumn(2);
-
-	// get delta translation vector by applying delta values to the x,y,z vectors
-	// tf2::Vector3 delta_translation(x_vector.getX() * delta_x, y_vector.getY() * delta_y, z_vector.getZ() * delta_z);
-	tf2::Vector3 delta_translation(x_vector * delta_x + y_vector * delta_y + z_vector * delta_z);
-
-	// apply the delta translation to the pose
-	pose_tf2->position.x = pose->position.x + delta_translation.getX();
-	pose_tf2->position.y = pose->position.y + delta_translation.getY();
-	pose_tf2->position.z = pose->position.z + delta_translation.getZ();
-
-	if (flip) {
-		// these quaternions describe the rotations required to get from the aruco poses to
-		// the end effector pose in such a way that the end effector (last joint) doesn't rotate if not necessary
-		const tf2::Quaternion flip_rotation = tf2::Quaternion(tf2::Vector3(0.0, 1.0, 0.0), M_PI_2);
-		const tf2::Quaternion extra_rotation = tf2::Quaternion(tf2::Vector3(1.0, 0.0, 0.0), -M_PI_2);
-
-		// apply the rotations to the pose quaternion and save the result
-		tf2::Quaternion flip_quat = flip_rotation * extra_rotation;
-
-		flip_quat = pose_quaternion * flip_quat;
-		flip_quat = flip_quat.normalized();
-
-		// TODO: align the end effector so that the roll angle becomes 0
-		//  get roll pitch yaw from the computed quaternion
-		// double roll, pitch, yaw;
-		// tf2::Matrix3x3(flip_quat).getRPY(roll, pitch, yaw);
-		// tf2::Quaternion alignment = tf2::Quaternion(tf2::Vector3(1.0, 0.0, 0.0), -roll);
-		// flip_quat = alignment * flip_quat;
-		// flip_quat = flip_quat.normalized();
-
-		// save the quaternion into the transformed pose
-		pose_tf2->orientation = tf2::toMsg(flip_quat);
-
-	} else {
-		pose_tf2->orientation = pose->orientation;
-	}
-
-	return pose_tf2;
-}
-
-/**
- * @brief compute the linear waypoints for the end effector to follow along the given axes
- * @param starting_pose the starting pose of the robot arm
- * @param x_length the length of the movement along the x axis
- * @param y_length the length of the movement along the y axis
- * @param z_length the length of the movement along the z axis
- * @return the linear waypoints to follow to move the robot arm along the given lengths
- */
-std::vector<geometry_msgs::msg::Pose> ButtonPresser::computeLinearWaypoints(geometry_msgs::msg::Pose::SharedPtr starting_pose,
-																			double x_length, double y_length, double z_length) {
-
-	// create list of waypoints to return
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints;
-	geometry_msgs::msg::Pose waypoint;
-
-	// compute the number of waypoints to interpolate and linear interpolation step size (around 1 cm)
-	const double total_length = std::sqrt(std::pow(x_length, 2) + std::pow(y_length, 2) + std::pow(z_length, 2));
-	const int waypoints_num = std::round(total_length / this->eef_step);
-	const double x_step = x_length / (double)waypoints_num;
-	const double y_step = y_length / (double)waypoints_num;
-	const double z_step = z_length / (double)waypoints_num;
-
-	// interpolate the waypoints poses along each axis
-	for (int i = 0; i <= waypoints_num; i++) {
-		waypoint = *this->apply_transform(starting_pose, x_step * (double)i, y_step * (double)i, z_step * (double)i, false);
-		linear_waypoints.push_back(waypoint);
-	}
-
-	return linear_waypoints;
-}
-
-/**
- * @brief compute the linear waypoints for the end effector to follow along the given axes, starting from the current pose
- * @param x_length the length of the movement along the x axis
- * @param y_length the length of the movement along the y axis
- * @param z_length the length of the movement along the z axis
- * @return the linear waypoints to follow to move the robot arm along the given lengths
- */
-std::vector<geometry_msgs::msg::Pose> ButtonPresser::computeLinearWaypoints(double x_length, double y_length, double z_length) {
-
-	// get the current pose of the robot arm
-	moveit::core::RobotState current_state = *move_group->getCurrentState();
-	const Eigen::Isometry3d current_pose = current_state.getGlobalLinkTransform(end_effector_link);
-
-	// lookup transform from global frame of reference (root frame) to fixed base frame
-	geometry_msgs::msg::TransformStamped tf_base_footprint_msg;
-	try {
-		// lookup transform from root base frame (base_footprint when load_base = true) to fixed base frame (igus rebel base link)
-		tf_base_footprint_msg = tf_buffer_->lookupTransform(fixed_base_frame, root_base_frame, tf2::TimePointZero);
-	} catch (const tf2::TransformException &ex) {
-		RCLCPP_ERROR(LOGGER, "%s", ex.what());
-		return std::vector<geometry_msgs::msg::Pose>();
-	}
-
-	// convert global link transform obtained to the fixed base frame of reference
-	Eigen::Isometry3d current_pose_tf2;
-	tf2::doTransform(current_pose, current_pose_tf2, tf_base_footprint_msg); // in, out, transform
-
-	// convert Eigen::Isometry3d to geometry_msgs::msg::Pose
-	geometry_msgs::msg::Pose::SharedPtr current_pose_msg = std::make_shared<geometry_msgs::msg::Pose>();
-	*current_pose_msg = tf2::toMsg(current_pose_tf2);
-	// compute the linear waypoints from the current pose
-	return this->computeLinearWaypoints(current_pose_msg, x_length, y_length, z_length);
-}
-
-/**
- * @param target_pose the cartesian pose target with reference frame associated
- * @return result of the movement
- * @brief Plan and move the robot to the target pose
- */
-bool ButtonPresser::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
-	RCLCPP_INFO(LOGGER, "Planning and moving to target pose");
-
-	// publish a coordinate axis corresponding to the pose with rviz visual tools
-	visual_tools->setBaseFrame(fixed_base_frame);
-	visual_tools->publishAxisLabeled(target_pose->pose, "target");
-	visual_tools->trigger();
-
-	// set the target pose
-	move_group->setStartState(*move_group->getCurrentState());
-	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
-	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
-	move_group->setPoseTarget(*target_pose, end_effector_link);
-	move_group->setPlannerId("RRTConnectkConfigDefault");
-	move_group->setPlanningTime(5.0);
-
-	// optionally limit accelerations and velocity scaling
-	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_cartesian_space);
-	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
-
-	/*
-	if (planar_movement) {
-		// set orientation constraint during movement to make fixed end effector orientation
-
-		// constraint on the orientation of the end effector
-		moveit_msgs::msg::OrientationConstraint constrained_orientation;
-		constrained_orientation.link_name = end_effector_link;
-		constrained_orientation.header.frame_id = fixed_base_frame;
-		// maintain same orientation as the target pose
-		constrained_orientation.orientation = target_pose->pose.orientation;
-		constrained_orientation.absolute_x_axis_tolerance = 1.0;
-		constrained_orientation.absolute_y_axis_tolerance = 1.0;
-		constrained_orientation.absolute_z_axis_tolerance = 1.0;
-		constrained_orientation.weight = 1.0;
-
-		// constraint on the position of the end effector --> planar movement along a line
-		moveit_msgs::msg::PositionConstraint constrained_position;
-		constrained_position.link_name = end_effector_link;
-		constrained_position.header.frame_id = fixed_base_frame;
-		constrained_position.target_point_offset.x = 0.1;
-		constrained_position.target_point_offset.y = 0.1;
-		constrained_position.target_point_offset.z = 0.1;
-		constrained_position.weight = 1.0;
-		// create line shape constraint (approximated as a box)
-		shape_msgs::msg::SolidPrimitive line;
-		line.type = shape_msgs::msg::SolidPrimitive::BOX;
-		line.dimensions = {0.3, 0.1, 0.1}; // dimensions in meters: x, y, z
-		constrained_position.constraint_region.primitives.emplace_back(line);
-
-		// define the pose of the line shape constraint
-		geometry_msgs::msg::Pose line_pose;
-		line_pose.position.x = target_pose->pose.position.x;
-		line_pose.position.y = target_pose->pose.position.y;
-		line_pose.position.z = target_pose->pose.position.z;
-		line_pose.orientation = target_pose->pose.orientation;
-		constrained_position.constraint_region.primitive_poses.emplace_back(line_pose);
-
-		// convert target pose into isometry 3d
-		Eigen::Isometry3d target_pose_iso3d;
-		tf2::fromMsg(target_pose->pose, target_pose_iso3d);
-
-		// publish a wireframe bounding box corresponding to the line shape constraint for visualization
-		// of the planar movement physical constraint
-		visual_tools->publishWireframeCuboid(target_pose_iso3d, line.dimensions[0], line.dimensions[1], line.dimensions[2],
-											rviz_visual_tools::CYAN);
-		visual_tools->trigger();
-
-		// apply bothbool planar_movement position and orientation constraints
-		moveit_msgs::msg::Constraints constrained_endeffector;
-		constrained_endeffector.orientation_constraints.push_back(constrained_orientation);
-		constrained_endeffector.position_constraints.push_back(constrained_position);
-		move_group->setPathConstraints(constrained_endeffector);
-	}
-	*/
-
-	move_group->clearPathConstraints();
-
-	// create plan for reaching the goal pose
-	// make several attempts at planning until a valid motion is found or the maximum number of retries is reached
-	int attempt = 0;
-	bool valid_motion = false;
-	moveit::planning_interface::MoveGroupInterface::Plan plan_motion;
-	moveit::core::MoveItErrorCode response;
-	while (attempt < n_max_retries && !valid_motion) {
-		// attempt at planning and moving to the joint space goal
-		response = move_group->plan(plan_motion);
-		valid_motion = bool(response);
-		attempt++;
-	}
-
-	// show output of planned movement
-	RCLCPP_INFO(LOGGER, "Plan result = %s", moveit::core::error_code_to_string(response).c_str());
-
-	// visualizing the trajectory
-	joint_model_group = move_group->getCurrentState()->getJointModelGroup(PLANNING_GROUP);
-	auto link_eef = move_group->getCurrentState()->getLinkModel(end_effector_link);
-	visual_tools->setBaseFrame(plan_motion.trajectory.multi_dof_joint_trajectory.header.frame_id);
-	visual_tools->publishTrajectoryLine(plan_motion.trajectory, link_eef, joint_model_group);
-	visual_tools->trigger();
-
-	if (bool(response)) { // if the plan was successful
-		RCLCPP_INFO(LOGGER, "moving the robot with cartesian space goal");
-		move_group->execute(plan_motion);
-	} else {
-		RCLCPP_ERROR(LOGGER, "Could not compute plan successfully");
-	}
-	return bool(response);
-}
-
-/**
- * @param pose_waypoints the sequence of waypoints to follow for the end effector
- * @brief Plan and move the robot to the sequence of poses, in cartesian space
- * @return percentage of completion of the linear sequence of waypoints
- */
-double ButtonPresser::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_waypoints) {
-
-	RCLCPP_INFO(LOGGER, "Planning and moving to target pose with linear path");
-
-	// set the target pose
-	move_group->setStartState(*move_group->getCurrentState());
-	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
-	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
-	move_group->setPlannerId("RRTConnectkConfigDefault");
-	move_group->setPlanningTime(5.0);
-
-	// optionally limit accelerations and velocity scaling
-	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_cartesian_space);
-	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
-
-	// output robot trajectory and output error code
-	moveit_msgs::msg::RobotTrajectory cartesian_trajectory;
-	moveit_msgs::msg::RobotTrajectory cartesian_trajectory_temp;
-	moveit_msgs::msg::MoveItErrorCodes *error_codes = new moveit_msgs::msg::MoveItErrorCodes();
-
-	int attempt = 0;
-	double completed_proportion = -1.0;
-	// attempt several times until the completed proportion is maximized or the maximum number of retries is reached
-	while (attempt < n_max_retries && completed_proportion < 1.0) {
-		// linear movement, end effector step size, jump threshold, resulting trajectory, avoid collisions, error codes
-		// this function returns the proportion of the trajectory that was successfully planned
-		// computes cartesian path while taking into account the collisions and not constraining the robot state space
-		// the resulting trajectory is a sequence of waypoints for the end effector to follow
-		double completed_proportion_temp = move_group->computeCartesianPath(pose_waypoints, this->max_step,
-																			this->jump_threshold,
-																			cartesian_trajectory_temp,
-																			true, error_codes);
-		RCLCPP_INFO(LOGGER, "Temp Cartesian linear path: %.2f%% completion", completed_proportion_temp * 100.0);
-		// if linear motion has better completion, update the trajectory and the completion proportion
-		if (completed_proportion_temp > completed_proportion) {
-			completed_proportion = completed_proportion_temp;
-			cartesian_trajectory = cartesian_trajectory_temp;
-		}
-
-		attempt++;
-	}
-
-	RCLCPP_INFO(LOGGER, "Final Cartesian linear path: %.2f%% achieved", completed_proportion * 100.0);
-	// print out the error codes
-	// RCLCPP_INFO(LOGGER, "Error codes: %s", moveit::core::error_code_to_string(*error_codes).c_str());
-
-	// show linear trajectory points
-	visual_tools->setBaseFrame(fixed_base_frame);
-	visual_tools->publishPath(pose_waypoints, rviz_visual_tools::LIME_GREEN, rviz_visual_tools::SMALL);
-	for (unsigned int i = 0; i < pose_waypoints.size(); ++i) {
-		visual_tools->publishAxisLabeled(pose_waypoints[i], "pt" + std::to_string(i), rviz_visual_tools::XSMALL);
-	}
-	visual_tools->trigger();
-
-	if (completed_proportion == -1.0) {
-		// couldn't reach even the first waypoint
-		RCLCPP_ERROR(LOGGER, "Could not compute cartesian path successfully");
-		return 0.0;
-	} else {
-		// execute the valid portion of the planned path
-		move_group->execute(cartesian_trajectory);
-		return completed_proportion;
-	}
-}
-
-/**
- * @brief Plan and move the robot to the joint space goal
- * @param joint_space_goal the joint space goal, sequence of 6 joint values expressed in radians
- * @return true if plan and movement were successful, false otherwise
- */
-bool ButtonPresser::robotPlanAndMove(std::vector<double> joint_space_goal) {
-	// Setup a joint space goal
-	moveit::core::RobotState goal_state(*move_group->getCurrentState());
-	goal_state.setJointGroupPositions(joint_model_group, joint_space_goal);
-
-	move_group->setStartState(*move_group->getCurrentState());
-	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
-	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
-	move_group->setPlanningTime(5.0);
-	// optionally limit accelerations and velocity scaling
-	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_joint_space);
-	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
-
-	bool valid_motion = move_group->setJointValueTarget(goal_state);
-	if (!valid_motion) {
-		RCLCPP_ERROR(LOGGER, "Target joints outside their physical limits");
-		return false;
-	}
-
-	// gets end effector link with respect to global frame of reference (root frame)
-	const Eigen::Isometry3d goal_pose = goal_state.getGlobalLinkTransform(end_effector_link);
-
-	// lookup transform from global frame of reference (root frame) to fixed base frame
-	geometry_msgs::msg::TransformStamped tf_base_footprint_msg;
-	try {
-		// lookup transform from root base frame (base_footprint when load_base = true) to fixed base frame (igus rebel base link)
-		tf_base_footprint_msg = tf_buffer_->lookupTransform(fixed_base_frame, root_base_frame, tf2::TimePointZero);
-	} catch (const tf2::TransformException &ex) {
-		RCLCPP_ERROR(LOGGER, "%s", ex.what());
-		return false;
-	}
-
-	// convert global link transform obtained to the fixed base frame of reference
-	Eigen::Isometry3d goal_pose_tf2;
-	tf2::doTransform(goal_pose, goal_pose_tf2, tf_base_footprint_msg); // in, out, transform
-
-	// use rviz visual tools to publish a coordinate axis corresponding to the goal pose defined
-	joint_model_group = move_group->getCurrentState()->getJointModelGroup(PLANNING_GROUP);
-	visual_tools->setBaseFrame(fixed_base_frame);
-	visual_tools->publishAxisLabeled(goal_pose_tf2, "search_pose");
-	visual_tools->trigger();
-
-	// make several attempts at planning until a valid motion is found or the maximum number of retries is reached
-	int attempt = 0;
-	valid_motion = false;
-	moveit::planning_interface::MoveGroupInterface::Plan search_plan;
-	moveit::core::MoveItErrorCode response;
-	while (attempt < n_max_retries && !valid_motion) {
-		// attempt at planning and moving to the joint space goal
-		response = move_group->plan(search_plan);
-		valid_motion = bool(response);
-		attempt++;
-	}
-
-	// visualizing the trajectory
-	RCLCPP_INFO(LOGGER, "Planning to the searching position = %s", moveit::core::error_code_to_string(response).c_str());
-
-	visual_tools->setBaseFrame(root_base_frame);
-	visual_tools->publishTrajectoryLine(search_plan.trajectory, goal_state.getLinkModel(end_effector_link), joint_model_group);
-	visual_tools->trigger();
-
-	if (bool(response)) {
-		RCLCPP_INFO(LOGGER, "Moving the robot to searching pose with joint space goal");
-		move_group->execute(search_plan);
-	} else {
-		RCLCPP_ERROR(LOGGER, "Could not compute plan successfully");
-	}
-
-	return bool(response);
-}
-
-/**
- * @brief Create a workspace for the robot using a set of virtual walls acting as collision objects
- * @return the set of collision objects representing the virtual walls
- */
-std::vector<moveit_msgs::msg::CollisionObject> ButtonPresser::createCollisionWalls() {
-	// add box collision objects to the planning scene
-
-	// definition of the first wall
-	moveit_msgs::msg::CollisionObject wall1, wall2, wall3;
-	wall1.header.frame_id = root_base_frame;
-	wall1.id = "wall1";
-
-	shape_msgs::msg::SolidPrimitive primitive;
-	primitive.type = primitive.BOX;
-	primitive.dimensions.resize(3);
-	primitive.dimensions[primitive.BOX_X] = 0.8;
-	primitive.dimensions[primitive.BOX_Y] = 0.05;
-	primitive.dimensions[primitive.BOX_Z] = 1.5;
-
-	geometry_msgs::msg::Pose wall1_pose;
-	wall1_pose.orientation.w = 1.0;
-	wall1_pose.position.x = -0.2;
-	wall1_pose.position.y = -0.5;
-	wall1_pose.position.z = 0.7;
-
-	wall1.primitives.push_back(primitive);
-	wall1.primitive_poses.push_back(wall1_pose);
-	wall1.operation = wall1.ADD;
-
-	// definition of the second wall
-	wall2.header.frame_id = root_base_frame;
-	wall2.id = "wall2";
-
-	geometry_msgs::msg::Pose wall2_pose;
-	wall2_pose.orientation.w = 1.0;
-	wall2_pose.position.x = -0.2;
-	wall2_pose.position.y = 0.5;
-	wall2_pose.position.z = 0.7;
-
-	wall2.primitives.push_back(primitive);
-	wall2.primitive_poses.push_back(wall2_pose);
-	wall2.operation = wall2.ADD;
-
-	// definition of the third wall
-	wall3.header.frame_id = root_base_frame;
-	wall3.id = "wall3";
-
-	shape_msgs::msg::SolidPrimitive primitive3;
-	primitive3.type = primitive3.BOX;
-	primitive3.dimensions.resize(3);
-	primitive3.dimensions[primitive3.BOX_X] = 0.05;
-	primitive3.dimensions[primitive3.BOX_Y] = 1.0;
-	primitive3.dimensions[primitive3.BOX_Z] = 1.5;
-
-	geometry_msgs::msg::Pose wall3_pose;
-	wall3_pose.orientation.w = 1.0;
-	wall3_pose.position.x = -0.6;
-	wall3_pose.position.y = 0.0;
-	wall3_pose.position.z = 0.7;
-
-	wall3.primitives.push_back(primitive3);
-	wall3.primitive_poses.push_back(wall3_pose);
-	wall3.operation = wall3.ADD;
-
-	// add the walls to the set of collision objects
-	std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
-	collision_objects.push_back(wall1);
-	collision_objects.push_back(wall2);
-	collision_objects.push_back(wall3);
-
-	return collision_objects;
-}
-
-/**
- * @brief Add the virtual walls to the planning scene
- */
-void ButtonPresser::addCollisionWallsToScene() {
-	// instantiate a set of collision walls acting as workspace bounds
-	std::vector<moveit_msgs::msg::CollisionObject> collision_walls = this->createCollisionWalls();
-	// add collision walls to the planning scene
-	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-	planning_scene_interface.addCollisionObjects(collision_walls);
-}
-
-/**
- * @brief Remove the virtual walls from the planning scene
- */
-void ButtonPresser::removeCollisionWalls() {
-	// remove the collision walls from the planning scene
-	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-	planning_scene_interface.removeCollisionObjects({"wall1", "wall2", "wall3"});
 }
 
 // getter for the ready flag

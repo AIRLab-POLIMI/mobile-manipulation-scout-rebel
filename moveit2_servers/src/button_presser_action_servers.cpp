@@ -9,14 +9,18 @@ using namespace moveit2_action_servers;
 
 /**
  * @brief Construct a new ButtonPresserActionServers object
+ * @param moveit2_api the moveit2 API object instantiated in the main function
  * @param button_presser_api the button presser API object instantiated in the main function
  * @param options the node options
  */
-ButtonPresserActionServers::ButtonPresserActionServers(std::shared_ptr<ButtonPresser> &button_presser_api,
+ButtonPresserActionServers::ButtonPresserActionServers(std::shared_ptr<MoveIt2APIs> &moveit2_api,
+													   std::shared_ptr<ButtonPresser> &button_presser_api,
 													   const rclcpp::NodeOptions &options)
 	: Node("button_presser_action_server", options) {
 
 	this->button_presser_api_ = button_presser_api;
+
+	this->moveit2_api_ = moveit2_api;
 
 	// Create the action server and bind the goal, cancel and accepted callbacks
 	this->button_presser_action_server_ = rclcpp_action::create_server<ButtonPressAction>(
@@ -172,7 +176,7 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 	}
 
 	// add the collision walls to the planning scene
-	this->button_presser_api_->addCollisionWallsToScene();
+	this->moveit2_api_->addCollisionWallsToScene();
 
 	// iterate over the waypoints and move the robot arm to each of them
 	int waypoints_size = (int)waypoints.size();
@@ -186,7 +190,7 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 		goal_handle->publish_feedback(feedback);
 
 		// move the robot arm to the current waypoint
-		bool valid_motion = this->button_presser_api_->robotPlanAndMove(waypoints[i]);
+		bool valid_motion = this->moveit2_api_->robotPlanAndMove(waypoints[i]);
 		if (!valid_motion) {
 			RCLCPP_ERROR(LOGGER, "Could not move to waypoint %d", i);
 			continue; // attempt planning to next waypoint and skip this one
@@ -238,7 +242,7 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	this->button_presser_api_->saveMarkersCorrectedPositions();
 
 	// remove collision walls from the planning scene
-	this->button_presser_api_->removeCollisionWalls();
+	this->moveit2_api_->removeCollisionWalls();
 
 	int count_completed_motions = 0;
 	float percentage_completion_linear_motions = 0.0;
@@ -253,7 +257,7 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 
 	// first move to the predefined looking pose
 	geometry_msgs::msg::PoseStamped::SharedPtr looking_pose = this->button_presser_api_->computeLookingPose();
-	bool move1 = this->button_presser_api_->robotPlanAndMove(looking_pose);
+	bool move1 = this->moveit2_api_->robotPlanAndMove(looking_pose);
 	if (move1) {
 		count_completed_motions++;
 	}
@@ -268,17 +272,17 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 
 	// move to the pose above the button 1
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_1 = this->button_presser_api_->getPoseAboveButton(1);
-	bool move2 = this->button_presser_api_->robotPlanAndMove(pose_above_button_1);
+	bool move2 = this->moveit2_api_->robotPlanAndMove(pose_above_button_1);
 	if (move2) {
 		count_completed_motions++;
 	}
 
 	// compute linear waypoints to press the button
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn1 = this->button_presser_api_->computeLinearWaypoints(
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn1 = this->moveit2_api_->computeLinearWaypoints(
 		std::make_shared<geometry_msgs::msg::Pose>(pose_above_button_1->pose), delta_pressing[0], 0.0, 0.0);
 
 	// move the robot arm along the linear waypoints --> descend to press the button
-	float move3 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn1);
+	float move3 = this->moveit2_api_->robotPlanAndMove(linear_waypoints_btn1);
 	percentage_completion_linear_motions += move3;
 	if (move3 == 1.0) {
 		count_completed_motions++;
@@ -286,10 +290,10 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 
 	// ascent to release the button --> linear motion from the reached position to the starting position
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_1_reverse =
-		this->button_presser_api_->computeLinearWaypoints(-delta_pressing[0], 0.0, 0.0);
+		this->moveit2_api_->computeLinearWaypoints(-delta_pressing[0], 0.0, 0.0);
 
 	// move the robot arm along the linear waypoints --> ascend to release the button
-	float move4 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_1_reverse);
+	float move4 = this->moveit2_api_->robotPlanAndMove(linear_waypoints_1_reverse);
 	percentage_completion_linear_motions += move4;
 	if (move4 == 1.0) {
 		count_completed_motions++;
@@ -304,17 +308,17 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 
 	// move to the pose above button 2
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_2 = this->button_presser_api_->getPoseAboveButton(2);
-	bool move5 = this->button_presser_api_->robotPlanAndMove(pose_above_button_2);
+	bool move5 = this->moveit2_api_->robotPlanAndMove(pose_above_button_2);
 	if (move5) {
 		count_completed_motions++;
 	}
 
 	// compute linear waypoints to press the button
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn2 = this->button_presser_api_->computeLinearWaypoints(
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn2 = this->moveit2_api_->computeLinearWaypoints(
 		std::make_shared<geometry_msgs::msg::Pose>(pose_above_button_2->pose), delta_pressing[1], 0.0, 0.0);
 
 	// move the robot arm along the linear waypoints --> descend to press the button
-	float move6 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn2);
+	float move6 = this->moveit2_api_->robotPlanAndMove(linear_waypoints_btn2);
 	percentage_completion_linear_motions += move6;
 	if (move6 == 1.0) {
 		count_completed_motions++;
@@ -322,9 +326,9 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 
 	// ascent to release the button --> linear motion from the reached position to the starting position
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_2_reverse =
-		this->button_presser_api_->computeLinearWaypoints(-delta_pressing[1], 0.0, 0.0);
+		this->moveit2_api_->computeLinearWaypoints(-delta_pressing[1], 0.0, 0.0);
 	// move the robot arm along the linear waypoints --> ascend to release the button
-	float move7 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_2_reverse);
+	float move7 = this->moveit2_api_->robotPlanAndMove(linear_waypoints_2_reverse);
 	percentage_completion_linear_motions += move7;
 	if (move7 == 1.0) {
 		count_completed_motions++;
@@ -339,26 +343,26 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 
 	// move to the pose above button 3
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_3 = this->button_presser_api_->getPoseAboveButton(3);
-	bool move8 = this->button_presser_api_->robotPlanAndMove(pose_above_button_3);
+	bool move8 = this->moveit2_api_->robotPlanAndMove(pose_above_button_3);
 	if (move8) {
 		count_completed_motions++;
 	}
 
 	// compute linear waypoints to press the button
-	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn3 = this->button_presser_api_->computeLinearWaypoints(
+	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn3 = this->moveit2_api_->computeLinearWaypoints(
 		std::make_shared<geometry_msgs::msg::Pose>(pose_above_button_3->pose), delta_pressing[2], 0.0, 0.0);
 
 	// move the robot arm along the linear waypoints --> descend to press the button
-	float move9 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_btn3);
+	float move9 = this->moveit2_api_->robotPlanAndMove(linear_waypoints_btn3);
 	percentage_completion_linear_motions += move9;
 	if (move9 == 1.0) {
 		count_completed_motions++;
 	}
 
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_3_reverse =
-		this->button_presser_api_->computeLinearWaypoints(-delta_pressing[2], 0.0, 0.0);
+		this->moveit2_api_->computeLinearWaypoints(-delta_pressing[2], 0.0, 0.0);
 	// move the robot arm along the linear waypoints --> ascend to release the button
-	float move10 = this->button_presser_api_->robotPlanAndMove(linear_waypoints_3_reverse);
+	float move10 = this->moveit2_api_->robotPlanAndMove(linear_waypoints_3_reverse);
 	percentage_completion_linear_motions += move10;
 	if (move10 == 1.0) {
 		count_completed_motions++;
@@ -372,7 +376,7 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	goal_handle->publish_feedback(feedback);
 
 	// move to the predefined looking pose
-	bool move11 = this->button_presser_api_->robotPlanAndMove(looking_pose);
+	bool move11 = this->moveit2_api_->robotPlanAndMove(looking_pose);
 	if (move11) {
 		count_completed_motions++;
 	}
@@ -380,7 +384,7 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 	// move to the parked position
 	RCLCPP_INFO(LOGGER, "Moving to parked position and ending demo");
 	// move to the last search waypoint
-	bool move12 = this->button_presser_api_->robotPlanAndMove(last_searched_pose);
+	bool move12 = this->moveit2_api_->robotPlanAndMove(last_searched_pose);
 	if (move12) {
 		count_completed_motions++;
 	}
@@ -414,7 +418,7 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarFo
 	waypoints = this->button_presser_api_->computeSearchingWaypoints(false);
 
 	// add the collision walls to the planning scene
-	this->button_presser_api_->addCollisionWallsToScene();
+	this->moveit2_api_->addCollisionWallsToScene();
 
 	// iterate over the waypoints and move the robot arm to each of them
 	int waypoints_size = (int)waypoints.size();
@@ -428,7 +432,7 @@ geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarFo
 		goal_handle->publish_feedback(feedback);
 
 		// move the robot arm to the current waypoint
-		bool valid_motion = this->button_presser_api_->robotPlanAndMove(waypoints[i]);
+		bool valid_motion = this->moveit2_api_->robotPlanAndMove(waypoints[i]);
 		if (!valid_motion) {
 			RCLCPP_ERROR(LOGGER, "Could not move to waypoint %d", i);
 			continue; // attempt planning to next waypoint and skip this one
@@ -492,25 +496,29 @@ int main(int argc, char *argv[]) {
 	rclcpp::NodeOptions node_options;
 	node_options.automatically_declare_parameters_from_overrides(true);
 
+	// create and instance of the moveit2 apis node functionalities
+	auto moveit2_apis_node = std::make_shared<MoveIt2APIs>(node_options);
 	// Create an instance of the button presser node
-	auto button_presser_api_node = std::make_shared<ButtonPresser>(node_options);
+	auto button_presser_api_node = std::make_shared<ButtonPresser>(moveit2_apis_node, node_options);
 	// Create an instance of the button presser action server node
-
-	auto action_server_node = std::make_shared<ButtonPresserActionServers>(button_presser_api_node, node_options);
+	auto action_server_node = std::make_shared<ButtonPresserActionServers>(moveit2_apis_node,
+																		   button_presser_api_node,
+																		   node_options);
 
 	// run nodes spinning in a multi-threaded executor asynchronously
 	rclcpp::executors::MultiThreadedExecutor executor;
-	auto main_thread = std::make_unique<std::thread>([&executor, &button_presser_api_node, &action_server_node]() {
-		executor.add_node(button_presser_api_node->get_node_base_interface());
-		executor.add_node(action_server_node->get_node_base_interface());
-		executor.spin();
-	});
+	auto main_thread = std::make_unique<std::thread>(
+		[&executor, &button_presser_api_node, &moveit2_apis_node, &action_server_node]() {
+			executor.add_node(button_presser_api_node->get_node_base_interface());
+			executor.add_node(action_server_node->get_node_base_interface());
+			executor.spin();
+		});
 
 	// initialize planner, move group, planning scene and get general info
-	button_presser_api_node->initPlanner();
+	moveit2_apis_node->initPlanner();
 
 	// initialize visual tools for drawing on rviz
-	button_presser_api_node->initRvizVisualTools();
+	moveit2_apis_node->initRvizVisualTools();
 
 	main_thread->join();
 

@@ -28,6 +28,7 @@ find_package(rclcpp_action REQUIRED)
 add_executable(button_presser_demo
 	src/button_presser_main_demo.cpp
 	src/button_presser.cpp
+	src/moveit2_apis.cpp
 )
 
 ament_target_dependencies(button_presser_demo
@@ -38,6 +39,7 @@ ament_target_dependencies(button_presser_demo
 add_executable(button_presser_action_servers
 	src/button_presser_action_servers.cpp
 	src/button_presser.cpp
+	src/moveit2_apis.cpp
 )
 ament_target_dependencies(button_presser_action_servers
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools tf2_kdl moveit_ros_planning_interface
@@ -47,7 +49,7 @@ ament_target_dependencies(button_presser_action_servers
 # test button pose computation --> publishes predefined aruco pose and computes button pose for debugging
 add_executable(test_button_pose_computation
 	test/test_button_pose_computation.cpp
-	src/button_presser.cpp
+	src/moveit2_apis.cpp
 )
 ament_target_dependencies(test_button_pose_computation
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools tf2_kdl moveit_ros_planning_interface

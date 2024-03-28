@@ -6,10 +6,10 @@
 // ROS2 C++ imports
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
-#include <rclcpp_components/register_node_macro.hpp>
 
 // button presser API code
 #include "button_presser.hpp"
+#include "moveit2_apis.hpp"
 
 // custom action definition in mobile_manipulation_interfaces
 #include "mobile_manipulation_interfaces/action/button_find.hpp"
@@ -30,11 +30,13 @@ class ButtonPresserActionServers : public rclcpp::Node {
 public:
 	/**
 	 * @brief Construct a new ButtonPresserActionServers object
+	 * @param moveit2_api the moveit2 API object instantiated in the main function
 	 * @param button_presser_api the button presser API object instantiated in the main function
 	 * @param options the node options
 	 */
-	ButtonPresserActionServers(std::shared_ptr<ButtonPresser> &button_presser_api,
-							  const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
+	ButtonPresserActionServers(std::shared_ptr<MoveIt2APIs> &moveit2_api,
+							   std::shared_ptr<ButtonPresser> &button_presser_api,
+							   const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 	/**
 	 * @brief handle goal request for the button press action server
@@ -129,6 +131,9 @@ private:
 
 	// button presser API object
 	std::shared_ptr<ButtonPresser> button_presser_api_;
+
+	// moveit2 API object
+	std::shared_ptr<MoveIt2APIs> moveit2_api_;
 
 	// last searching waypoint pose
 	std::vector<double> last_searched_pose;

@@ -11,22 +11,24 @@ int main(int argc, char *argv[]) {
 	// read parameters
 	rclcpp::NodeOptions node_options;
 	node_options.automatically_declare_parameters_from_overrides(true);
-	
-	// Create an instance of the button presser node
-	auto node = std::make_shared<ButtonPresser>(node_options);
+
+	// Create an instance of the button presser node and moveit2 apis node
+	auto moveit2_apis_node = std::make_shared<MoveIt2APIs>(node_options);
+	auto button_presser_node = std::make_shared<ButtonPresser>(moveit2_apis_node, node_options);
 
 	rclcpp::executors::MultiThreadedExecutor executor;
 
-	auto main_thread = std::make_unique<std::thread>([&executor, &node]() {
-		executor.add_node(node->get_node_base_interface());
+	auto main_thread = std::make_unique<std::thread>([&executor, &button_presser_node, &moveit2_apis_node]() {
+		executor.add_node(button_presser_node->get_node_base_interface());
+		executor.add_node(moveit2_apis_node->get_node_base_interface());
 		executor.spin();
 	});
 
 	// initialize planner, move group, planning scene and get general info
-	node->initPlanner();
+	moveit2_apis_node->initPlanner();
 
 	// initialize visual tools for drawing on rviz
-	node->initRvizVisualTools();
+	moveit2_apis_node->initRvizVisualTools();
 
 	// NOTE: change the following function to switch between static search and dynamic search
 
@@ -34,10 +36,10 @@ int main(int argc, char *argv[]) {
 	// node->moveToSearchingPose();
 
 	// alternatively start waving the robot arm to find the buttons setup
-	node->lookAroundForArucoMarkers(true, true);
+	button_presser_node->lookAroundForArucoMarkers(true, true);
 
 	// start the demo thread once the robot is in the searching pose
-	std::thread button_presser_demo_thread = std::thread(&ButtonPresser::buttonPresserDemoThread, node);
+	std::thread button_presser_demo_thread = std::thread(&ButtonPresser::buttonPresserDemoThread, button_presser_node);
 	button_presser_demo_thread.detach();
 
 	main_thread->join();

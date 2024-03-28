@@ -3,7 +3,10 @@
 // Master Degree: Computer Science Engineering
 // Laboratory: Artificial Intelligence and Robotics Laboratory (AIRLab)
 
-#include "button_presser.hpp"
+#include "moveit2_apis.hpp"
+
+// custom message definition for aruco markers
+#include <aruco_interfaces/msg/aruco_markers.hpp>
 
 int main(int argc, char *argv[]) {
 	rclcpp::init(argc, argv);
@@ -13,7 +16,7 @@ int main(int argc, char *argv[]) {
 	node_options.automatically_declare_parameters_from_overrides(true);
 
 	// create a callback for topic subscription to /aruco/markers/corrected
-	auto node = std::make_shared<ButtonPresser>(node_options);
+	auto node = std::make_shared<MoveIt2APIs>(node_options);
 
 	// create a publisher to visualize the aruco markers on rviz
 	auto test_aruco_marker_pub = node->create_publisher<geometry_msgs::msg::PoseArray>("/test_aruco_marker", 10);
