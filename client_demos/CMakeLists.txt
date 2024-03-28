@@ -55,10 +55,8 @@ ament_target_dependencies(park_and_interact
 # )
 
 # Install Cpp executables
-install(TARGETS park_and_interact
-	ARCHIVE DESTINATION lib
-	LIBRARY DESTINATION lib
-	RUNTIME DESTINATION bin
+install(TARGETS 
+	park_and_interact
 	DESTINATION lib/${PROJECT_NAME}
 )
 

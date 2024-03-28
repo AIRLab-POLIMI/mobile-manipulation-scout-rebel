@@ -84,7 +84,7 @@ private:
 	// y-axis from the buttons to the lights on top
 	// z-axis from the box going inwards towards the camera
 	const float delta_x[n_btns + 1] = {0.0, 0.01, 0.0, 0.0};
-	const float delta_y[n_btns + 1] = {0.05, 0.08, 0.07, 0.07};
+	const float delta_y[n_btns + 1] = {0.05, 0.075, 0.07, 0.07};
 	const float delta_z[n_btns + 1] = {0.15, 0.09, 0.08, 0.08};
 
 	// position vertical axis delta required to go down and press the button (or release it)
@@ -93,7 +93,7 @@ private:
 
 	// robot arm joint values for the looking pose
 	// should be valid for both scenarios where igus is mounted on the mobile robot base or on a table
-	std::vector<double> search_joints_positions = {-0.5, -1.2, 1.0, 0.0, 1.5, 0.0}; // radians
+	std::vector<double> search_joints_positions = {-0.5, -0.7, 1.5, 0.0, 1.35, 0.0}; // radians
 
 	// tolerance values for end effector poses
 	const float orientation_tolerance = 0.05; // radians
@@ -101,8 +101,8 @@ private:
 
 	// planning constants
 	const float max_velocity_scaling_joint_space = 0.5;
-	const float max_velocity_scaling_cartesian_space = 0.3;
-	const float max_acceleration_scaling = 0.2;
+	const float max_velocity_scaling_cartesian_space = 0.4;
+	const float max_acceleration_scaling = 0.3;
 	const short n_max_retries = 3;
 
 	// parameters for linear planning movement in cartesian path

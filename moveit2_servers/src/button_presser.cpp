@@ -319,7 +319,7 @@ std::vector<std::vector<double>> ButtonPresser::computeSearchingWaypoints(bool l
 		// first layer of waypoints: camera facing forward --> suitable for searching distant aruco markers
 		// it rotates 360 degrees in order to look everywhere around the robot, regardless of robot arm position
 		for (float i = range_min; i <= range_max; i += 0.2) {
-			std::vector<double> pos = {i, -0.5, -0.35, 0.0, 1.74, 0.0};
+			std::vector<double> pos = {i, 0.0, 0.25, 0.0, 1.55, 0.0};
 			waypoints.push_back(pos);
 		}
 		// it doesn't perform the other 2 layers of waypoints, because they are used only for close aruco markers
@@ -334,26 +334,26 @@ std::vector<std::vector<double>> ButtonPresser::computeSearchingWaypoints(bool l
 
 		// second layer of waypoints: camera facing slighly downwards --> suitable for searching close aruco markers
 		for (float i = range_max; i >= range_min; i -= 0.2) {
-			std::vector<double> pos = {i, -1.0, 0.4, 0.0, 1.74, 0.0};
+			std::vector<double> pos = {i, -0.5, 0.9, 0.0, 1.55, 0.0};
 			waypoints.push_back(pos);
 		}
 
 		if (load_base_arg) {
 			// adds extra segment to cover maximum angle in the second and third search layers
 			for (float i = extra_segment_max; i >= extra_segment_min; i -= 0.2) {
-				std::vector<double> pos = {i, -0.9, 0.25, 0.0, 1.74, 0.0};
+				std::vector<double> pos = {i, -0.4, 0.75, 0.0, 1.55, 0.0};
 				waypoints.push_back(pos);
 			}
 
 			for (float i = extra_segment_min; i <= extra_segment_max; i += 0.2) {
-				std::vector<double> pos = {i, -1.1, 0.7, 0.0, 1.74, 0.0};
+				std::vector<double> pos = {i, -0.6, 1.2, 0.0, 1.55, 0.0};
 				waypoints.push_back(pos);
 			}
 		}
 
 		// third layer of waypoints: camera facing downwards --> suitable for searching interactible aruco markers
 		for (float i = range_min; i <= range_max; i += 0.2) {
-			std::vector<double> pos = {i, -1.2, 0.8, 0.0, 1.74, 0.0};
+			std::vector<double> pos = {i, -0.7, 1.3, 0.0, 1.55, 0.0};
 			waypoints.push_back(pos);
 		}
 	}
@@ -373,31 +373,31 @@ std::vector<std::vector<double>> ButtonPresser::computeLocalizedSearchingWaypoin
 
 	// first layer of waypoints: camera facing forward --> suitable for searching distant aruco markers
 	for (float i = range_min; i <= range_max; i += 0.2) {
-		std::vector<double> pos = {i, -M_PI_2, 45.0 * M_PI / 180.0, 0.0, 100.0 * M_PI / 180.0, 0.0};
+		std::vector<double> pos = {i, -60.0 * M_PI / 180.0, 75.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
 	// second layer of waypoints: camera facing slighly downwards --> suitable for searching close aruco markers
 	for (float i = range_max; i >= range_min; i -= 0.2) {
-		std::vector<double> pos = {i, -M_PI_2, 55.0 * M_PI / 180.0, 0.0, 100.0 * M_PI / 180.0, 0.0};
+		std::vector<double> pos = {i, -60.0 * M_PI / 180.0, 85.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
 	// third layer of waypoints: camera facing downwards --> suitable for searching interactible aruco markers
 	for (float i = range_min; i <= range_max; i += 0.2) {
-		std::vector<double> pos = {i, -M_PI_2, 65.0 * M_PI / 180.0, 0.0, 100.0 * M_PI / 180.0, 0.0};
+		std::vector<double> pos = {i, -60.0 * M_PI / 180.0, 95.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
 	// repeat second layer of waypoints
 	for (float i = range_max; i >= range_min; i -= 0.2) {
-		std::vector<double> pos = {i, -M_PI_2, 55.0 * M_PI / 180.0, 0.0, 100.0 * M_PI / 180.0, 0.0};
+		std::vector<double> pos = {i, -60.0 * M_PI / 180.0, 85.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
 	// repeat first layer of waypoints
 	for (float i = range_min; i <= range_max; i += 0.2) {
-		std::vector<double> pos = {i, -M_PI_2, 45.0 * M_PI / 180.0, 0.0, 100.0 * M_PI / 180.0, 0.0};
+		std::vector<double> pos = {i, -60.0 * M_PI / 180.0, 75.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
