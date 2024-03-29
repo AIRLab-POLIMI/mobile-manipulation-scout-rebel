@@ -23,6 +23,7 @@ find_package(tf2_kdl REQUIRED)
 find_package(aruco_interfaces REQUIRED)
 find_package(mobile_manipulation_interfaces REQUIRED)
 find_package(rclcpp_action REQUIRED)
+find_package(igus_rebel_gripper_controller REQUIRED)
 
 # button presser demo --> move the robot to press 3 buttons in a row for a demo
 add_executable(button_presser_demo
@@ -33,7 +34,7 @@ add_executable(button_presser_demo
 
 ament_target_dependencies(button_presser_demo
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools tf2_kdl moveit_ros_planning_interface
-	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs aruco_interfaces)
+	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs aruco_interfaces igus_rebel_gripper_controller)
 
 # button presser action server --> action server for find and pressing buttons
 add_executable(button_presser_action_servers
@@ -43,7 +44,7 @@ add_executable(button_presser_action_servers
 )
 ament_target_dependencies(button_presser_action_servers
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools tf2_kdl moveit_ros_planning_interface
-	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs aruco_interfaces
+	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs aruco_interfaces igus_rebel_gripper_controller
 	rclcpp_action mobile_manipulation_interfaces)
 
 # test button pose computation --> publishes predefined aruco pose and computes button pose for debugging
@@ -53,7 +54,7 @@ add_executable(test_button_pose_computation
 )
 ament_target_dependencies(test_button_pose_computation
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools tf2_kdl moveit_ros_planning_interface
-	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs aruco_interfaces
+	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs aruco_interfaces igus_rebel_gripper_controller
 )
 
 install(TARGETS

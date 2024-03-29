@@ -32,6 +32,9 @@
 #include <thread>
 #include <vector>
 
+// custom service for the soft gripper pneumatic pump actuation
+#include "igus_rebel_gripper_controller/srv/gripper_actuation.hpp"
+
 class MoveIt2APIs : public rclcpp::Node {
 
 public:
@@ -86,6 +89,9 @@ private:
 	// this node
 	rclcpp::Node::SharedPtr moveit2_node_;
 
+	// service client for the soft gripper pneumatic pump installed on the robot
+	rclcpp::Client<igus_rebel_gripper_controller::srv::GripperActuation>::SharedPtr pump_service_client;
+
 public:
 	/**
 	 * @brief constructor for the moveit2 apis class
@@ -108,6 +114,37 @@ public:
 	 * @brief Initialize rviz visual tools for text and markers visualization
 	 */
 	void initRvizVisualTools(void);
+
+	/**
+	 * @brief Wait for the pump service to be available
+	 * @return true if the pump service is available, false otherwise
+	 */
+	bool waitForPumpService(void);
+
+	/**
+	 * @brief Turn off the pump
+	 */
+	void pump_off(void);
+
+	/**
+	 * @brief Turn on the pump and grip the object
+	 */
+	void pump_grip(void);
+
+	/**
+	 * @brief Turn on the pump and release the object
+	 */
+	void pump_release(void);
+
+	/**
+	 * @brief actuate the pump for the gripper when preparing to press the button when soft gripper is mounted
+	 */
+	void pressWithGripper(void);
+
+	/**
+	 * @brief turn off the pump for the gripper when the button is release and when soft gripper is mounted
+	 */
+	void releaseWithGripper(void);
 
 	/**
 	 * @param pose the pose of the aruco marker or a button

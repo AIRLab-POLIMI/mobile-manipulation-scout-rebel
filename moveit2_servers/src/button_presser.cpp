@@ -260,7 +260,7 @@ void ButtonPresser::arucoMarkersCorrectedCallback(const aruco_interfaces::msg::A
 
 	// transform the poses of the aruco markers with respect to the fixed base frame of reference
 	geometry_msgs::msg::TransformStamped tf_camera_base_msg = *moveit2_api->getTFfromBaseToCamera();
-	
+
 	geometry_msgs::msg::Pose aruco_marker_tf_pose;
 	// assign the markers to the correct array position based on their id
 	for (int i = 0; i < n_btns; i++) {
@@ -396,6 +396,9 @@ void ButtonPresser::buttonPresserDemoThread() {
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_1 = this->getPoseAboveButton(1);
 	moveit2_api->robotPlanAndMove(pose_above_button_1);
 
+	// use the soft gripper, when possible, to press the button
+	moveit2_api->pressWithGripper();
+
 	// compute linear waypoints to press the button
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn1 = moveit2_api->computeLinearWaypoints(
 		std::make_shared<geometry_msgs::msg::Pose>(pose_above_button_1->pose), delta_pressing[0], 0.0, 0.0);
@@ -407,10 +410,16 @@ void ButtonPresser::buttonPresserDemoThread() {
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_1_reverse = moveit2_api->computeLinearWaypoints(-delta_pressing[0], 0.0, 0.0);
 	moveit2_api->robotPlanAndMove(linear_waypoints_1_reverse);
 
+	// turn off the pump for the soft gripper, when possible, when not needed
+	//moveit2_api->releaseWithGripper();
+
 	// button 2
 	RCLCPP_INFO(LOGGER, "Pressing button 2 ...");
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_2 = this->getPoseAboveButton(2);
 	moveit2_api->robotPlanAndMove(pose_above_button_2);
+
+	// use the soft gripper, when possible, to press the button
+	//moveit2_api->pressWithGripper();
 
 	// compute linear waypoints to press the button
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn2 = moveit2_api->computeLinearWaypoints(
@@ -423,10 +432,16 @@ void ButtonPresser::buttonPresserDemoThread() {
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_2_reverse = moveit2_api->computeLinearWaypoints(-delta_pressing[1], 0.0, 0.0);
 	moveit2_api->robotPlanAndMove(linear_waypoints_2_reverse);
 
+	// turn off the pump for the soft gripper, when possible, when not needed
+	//moveit2_api->releaseWithGripper();
+
 	// button 3
 	RCLCPP_INFO(LOGGER, "Pressing button 3 ...");
 	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_3 = this->getPoseAboveButton(3);
 	moveit2_api->robotPlanAndMove(pose_above_button_3);
+
+	// use the soft gripper, when possible, to press the button
+	//moveit2_api->pressWithGripper();
 
 	// compute linear waypoints to press the button
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn3 = moveit2_api->computeLinearWaypoints(
@@ -438,6 +453,9 @@ void ButtonPresser::buttonPresserDemoThread() {
 	// ascent to release the button --> linear motion from the reached position to the starting position
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_3_reverse = moveit2_api->computeLinearWaypoints(-delta_pressing[2], 0.0, 0.0);
 	moveit2_api->robotPlanAndMove(linear_waypoints_3_reverse);
+
+	// turn off the pump for the soft gripper, when possible, when not needed
+	moveit2_api->releaseWithGripper();
 
 	// move back to the looking pose
 	RCLCPP_INFO(LOGGER, "Returning to looking pose");

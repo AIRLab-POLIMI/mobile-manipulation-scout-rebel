@@ -20,6 +20,9 @@ MoveIt2APIs::MoveIt2APIs(const rclcpp::NodeOptions &node_options) : Node("moveit
 
 	tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
 	tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+	// initialize pump service client
+	pump_service_client = this->create_client<igus_rebel_gripper_controller::srv::GripperActuation>("/gripper_actuate");
 }
 
 /**
@@ -179,6 +182,106 @@ void MoveIt2APIs::initRvizVisualTools() {
 	visual_tools->trigger();
 
 	RCLCPP_INFO(LOGGER, "Loaded rviz visual tools");
+}
+
+/**
+ * @brief Wait for the pump service to be available
+ * @return true if the pump service is available, false otherwise
+ */
+bool MoveIt2APIs::waitForPumpService() {
+
+	//check whether the soft gripper is installed
+	if (end_effector_link.rfind("soft_gripper", 0) != 0) {
+		RCLCPP_INFO(LOGGER, "Soft gripper is not installed");
+		return false;
+	}
+
+	int attempts = 0;
+	bool service_ready = pump_service_client->wait_for_service(std::chrono::milliseconds(100));
+	while (attempts < 50 && !service_ready) {
+		// RCLCPP_INFO(LOGGER, "service not available, waiting again...");
+		service_ready = pump_service_client->wait_for_service(std::chrono::milliseconds(100));
+		attempts++;
+	}
+	// log the status of the service
+	if (service_ready) {
+		RCLCPP_INFO(LOGGER, "Pump control service available. Ready to grip and release");
+	} else {
+		RCLCPP_ERROR(LOGGER, "Pump control service not available");
+	}
+	return service_ready;
+}
+
+/**
+ * @brief Turn off the pump
+ */
+void MoveIt2APIs::pump_off() {
+	auto request = std::make_shared<igus_rebel_gripper_controller::srv::GripperActuation::Request>();
+	request->command = "off";
+
+	auto result = pump_service_client->async_send_request(request);
+	// wait for the result
+	auto response = result.get(); // response is empty
+	RCLCPP_INFO(LOGGER, "Pump turned off");
+}
+
+/**
+ * @brief Turn on the pump and grip the object
+ */
+void MoveIt2APIs::pump_grip() {
+	auto request = std::make_shared<igus_rebel_gripper_controller::srv::GripperActuation::Request>();
+	request->command = "grip";
+
+	auto result = pump_service_client->async_send_request(request);
+	// wait for the result
+	auto response = result.get(); // response is empty
+	RCLCPP_INFO(LOGGER, "Pump on: gripped position");
+}
+
+/**
+ * @brief Turn on the pump and release the object
+ */
+void MoveIt2APIs::pump_release() {
+	auto request = std::make_shared<igus_rebel_gripper_controller::srv::GripperActuation::Request>();
+	request->command = "release";
+
+	auto result = pump_service_client->async_send_request(request);
+	// wait for the result
+	auto response = result.get(); // response is empty
+	RCLCPP_INFO(LOGGER, "Pump on: released position");
+}
+
+/**
+ * @brief actuate the pump for the gripper when preparing to press the button when soft gripper is mounted
+ */
+void MoveIt2APIs::pressWithGripper(void) {
+	// check if soft gripper is the end effector
+	if (end_effector_link.rfind("soft_gripper", 0) != 0) {
+		return;
+	}
+
+	if (pump_service_client->service_is_ready()) {
+		// turn on the pump and use the vacuum to press the button
+		pump_release();
+
+		// turn on the pump and press the buttons with the fingers
+		//pump_grip();
+	}
+}
+
+/**
+ * @brief turn off the pump for the gripper when the button is release and when soft gripper is mounted
+ */
+void MoveIt2APIs::releaseWithGripper(void) {
+	// check if soft gripper is the end effector
+	if (end_effector_link.rfind("soft_gripper", 0) != 0) {
+		return;
+	}
+
+	if (pump_service_client->service_is_ready()) {
+		// turn off the pump when it is not needed anymore
+		pump_off();
+	}
 }
 
 /**

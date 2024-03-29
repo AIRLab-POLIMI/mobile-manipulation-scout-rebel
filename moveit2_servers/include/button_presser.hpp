@@ -3,6 +3,9 @@
 // Master Degree: Computer Science Engineering
 // Laboratory: Artificial Intelligence and Robotics Laboratory (AIRLab)
 
+#ifndef BUTTON_PRESSER_HPP
+#define BUTTON_PRESSER_HPP
+
 // ROS2 imports
 #include <rclcpp/rclcpp.hpp>
 #include <tf2/exceptions.h>
@@ -26,6 +29,7 @@ class ButtonPresser : public rclcpp::Node {
 private:
 	const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit2::button_presser");
 
+	// topics for the aruco markers
 	const std::string aruco_markers_corrected_topic = "/aruco/markers/corrected";
 	const std::string aruco_single_marker_topic = "/aruco/markers";
 
@@ -79,6 +83,7 @@ private:
 	// this node
 	std::shared_ptr<rclcpp::Node> button_presser_node;
 
+	// moveit2 apis node object
 	std::shared_ptr<MoveIt2APIs> moveit2_api;
 
 public:
@@ -185,3 +190,5 @@ public:
 	// getter for delta_pressing array
 	std::array<double, 3> getDeltaPressing() const;
 };
+
+#endif // BUTTON_PRESSER_HPP

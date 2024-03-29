@@ -30,6 +30,9 @@ int main(int argc, char *argv[]) {
 	// initialize visual tools for drawing on rviz
 	moveit2_apis_node->initRvizVisualTools();
 
+	// initialize the soft gripper pneumatic pump service
+	moveit2_apis_node->waitForPumpService();
+
 	// NOTE: change the following function to switch between static search and dynamic search
 
 	// move to the predefined static searching pose
