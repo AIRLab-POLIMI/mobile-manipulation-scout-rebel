@@ -392,12 +392,13 @@ void ButtonPresser::buttonPresserDemoThread() {
 
 	// then press the buttons in order
 	RCLCPP_INFO(LOGGER, "Pressing button 1 ...");
-	// button 1
-	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_1 = this->getPoseAboveButton(1);
-	moveit2_api->robotPlanAndMove(pose_above_button_1);
 
 	// use the soft gripper, when possible, to press the button
 	moveit2_api->pressWithGripper();
+
+	// button 1
+	geometry_msgs::msg::PoseStamped::SharedPtr pose_above_button_1 = this->getPoseAboveButton(1);
+	moveit2_api->robotPlanAndMove(pose_above_button_1);
 
 	// compute linear waypoints to press the button
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_btn1 = moveit2_api->computeLinearWaypoints(
@@ -454,12 +455,12 @@ void ButtonPresser::buttonPresserDemoThread() {
 	std::vector<geometry_msgs::msg::Pose> linear_waypoints_3_reverse = moveit2_api->computeLinearWaypoints(-delta_pressing[2], 0.0, 0.0);
 	moveit2_api->robotPlanAndMove(linear_waypoints_3_reverse);
 
-	// turn off the pump for the soft gripper, when possible, when not needed
-	moveit2_api->releaseWithGripper();
-
 	// move back to the looking pose
 	RCLCPP_INFO(LOGGER, "Returning to looking pose");
 	moveit2_api->robotPlanAndMove(looking_pose);
+
+	// turn off the pump for the soft gripper, when possible, when not needed
+	moveit2_api->releaseWithGripper();
 
 	// move back to the last searched position
 	RCLCPP_INFO(LOGGER, "Returning to last searched position");

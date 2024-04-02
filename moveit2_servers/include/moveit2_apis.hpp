@@ -68,13 +68,16 @@ private:
 	// planning constants
 	const float max_velocity_scaling_joint_space = 0.5;
 	const float max_velocity_scaling_cartesian_space = 0.4;
-	const float max_acceleration_scaling = 0.3;
+	const float max_acceleration_scaling = 0.1;
 	const short n_max_retries = 3;
+	const float timeout_seconds = 2.0;
 
 	// parameters for linear planning movement in cartesian path
 	const double jump_threshold = 0.0; // 0.0 disables jump threshold
 	const double eef_step = 0.005;	   // interpolation resolution for linear path planning
 	const double max_step = 0.05;	   // maximum distance between consecutive waypoints
+
+	const double z_offset = 0.012; // offset [mm] for the z axis to compensate the positioning error
 
 	// planning and moving utilities
 	moveit::planning_interface::MoveGroupInterface *move_group;
@@ -198,6 +201,13 @@ public:
 	 * @return true if plan and movement were successful, false otherwise
 	 */
 	bool robotPlanAndMove(std::vector<double> joint_space_goal);
+
+	/**
+	 * @brief adds a XYZ offset to the target pose coordinate in the fixed base frame
+	 * @param target_pose the target pose to add the offset to
+	 * @return the target pose with the offset applied
+	*/
+	geometry_msgs::msg::PoseStamped::UniquePtr compensateTargetPose(geometry_msgs::msg::PoseStamped::SharedPtr target_pose);
 
 	/**
 	 * @brief Create a workspace for the robot using a set of virtual walls acting as collision objects

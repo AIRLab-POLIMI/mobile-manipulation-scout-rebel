@@ -190,7 +190,7 @@ void MoveIt2APIs::initRvizVisualTools() {
  */
 bool MoveIt2APIs::waitForPumpService() {
 
-	//check whether the soft gripper is installed
+	// check whether the soft gripper is installed
 	if (end_effector_link.rfind("soft_gripper", 0) != 0) {
 		RCLCPP_INFO(LOGGER, "Soft gripper is not installed");
 		return false;
@@ -265,7 +265,7 @@ void MoveIt2APIs::pressWithGripper(void) {
 		pump_release();
 
 		// turn on the pump and press the buttons with the fingers
-		//pump_grip();
+		// pump_grip();
 	}
 }
 
@@ -371,8 +371,17 @@ std::vector<geometry_msgs::msg::Pose> MoveIt2APIs::computeLinearWaypoints(geomet
 
 	// interpolate the waypoints poses along each axis
 	for (int i = 0; i <= waypoints_num; i++) {
+		// compute the waypoint pose with the given transformation
 		waypoint = *this->apply_transform(starting_pose, x_step * (double)i, y_step * (double)i, z_step * (double)i, false);
-		linear_waypoints.push_back(waypoint);
+
+		// add offset compensation to the computed waypoint
+		geometry_msgs::msg::PoseStamped::SharedPtr waypoint_stamped = std::make_shared<geometry_msgs::msg::PoseStamped>();
+		waypoint_stamped->pose = waypoint;
+		waypoint_stamped->header.frame_id = fixed_base_frame;
+		geometry_msgs::msg::PoseStamped::UniquePtr waypoint_compensated = compensateTargetPose(waypoint_stamped);
+
+		// add the compensated waypoint to the list of waypoints
+		linear_waypoints.push_back(waypoint_compensated->pose);
 	}
 
 	return linear_waypoints;
@@ -420,18 +429,21 @@ std::vector<geometry_msgs::msg::Pose> MoveIt2APIs::computeLinearWaypoints(double
 bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
 	RCLCPP_INFO(LOGGER, "Planning and moving to target pose");
 
+	// apply offset compensation to the cartesian space target pose
+	geometry_msgs::msg::PoseStamped::UniquePtr compensated_target_pose = compensateTargetPose(target_pose);
+
 	// publish a coordinate axis corresponding to the pose with rviz visual tools
 	visual_tools->setBaseFrame(fixed_base_frame);
-	visual_tools->publishAxisLabeled(target_pose->pose, "target");
+	visual_tools->publishAxisLabeled(compensated_target_pose->pose, "target");
 	visual_tools->trigger();
 
 	// set the target pose
 	move_group->setStartState(*move_group->getCurrentState());
 	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
 	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
-	move_group->setPoseTarget(*target_pose, end_effector_link);
+	move_group->setPoseTarget(*compensated_target_pose, end_effector_link);
 	move_group->setPlannerId("RRTConnectkConfigDefault");
-	move_group->setPlanningTime(5.0);
+	move_group->setPlanningTime(timeout_seconds);
 
 	// optionally limit accelerations and velocity scaling
 	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_cartesian_space);
@@ -540,7 +552,7 @@ double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_
 	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
 	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
 	move_group->setPlannerId("RRTConnectkConfigDefault");
-	move_group->setPlanningTime(5.0);
+	move_group->setPlanningTime(timeout_seconds);
 
 	// optionally limit accelerations and velocity scaling
 	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_cartesian_space);
@@ -609,7 +621,7 @@ bool MoveIt2APIs::robotPlanAndMove(std::vector<double> joint_space_goal) {
 	move_group->setStartState(*move_group->getCurrentState());
 	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
 	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
-	move_group->setPlanningTime(5.0);
+	move_group->setPlanningTime(timeout_seconds);
 	// optionally limit accelerations and velocity scaling
 	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_joint_space);
 	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
@@ -670,6 +682,23 @@ bool MoveIt2APIs::robotPlanAndMove(std::vector<double> joint_space_goal) {
 	}
 
 	return bool(response);
+}
+
+/**
+ * @brief adds a XYZ offset to the target pose coordinate in the fixed base frame
+ * @param target_pose the target pose to add the offset to
+ * @return the target pose with the offset applied
+ */
+geometry_msgs::msg::PoseStamped::UniquePtr MoveIt2APIs::compensateTargetPose(geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
+	// create a new unique pointer for the transformed pose
+	geometry_msgs::msg::PoseStamped::UniquePtr offset_pose = std::make_unique<geometry_msgs::msg::PoseStamped>(*target_pose); // transformed pose
+
+	// apply the delta translation to the pose
+	offset_pose->pose.position.x = target_pose->pose.position.x;
+	offset_pose->pose.position.y = target_pose->pose.position.y;
+	offset_pose->pose.position.z = target_pose->pose.position.z + z_offset;
+
+	return offset_pose;
 }
 
 /**
