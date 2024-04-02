@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+	<name>soft_grasping</name>
+	<version>0.1.0</version>
+	<description>
+		ROS2 package for command and control of grasping and manipulation tasks, using a soft gripper, 
+        actuated by a pneumatic pump system. It contains action servers and API code for the mobile robot
+        to perform simple manipulation tasks. It relies on the igus_rebel_gripper_controller package for
+        the control of the gripper pump.
+	</description>
+
+	<maintainer email="simone.giampa@mail.polimi.it">Simone Giampà</maintainer>
+    <license>AIRLAB</license>
+    <url type="website">polimi.it</url>
+    <url type="repository">https://github.com/AIRLab-POLIMI/mobile-manipulation-scout-rebel</url>
+    <author email="simone.giampa@mail.polimi.it">Simone Giampà</author>
+
+	<buildtool_depend>ament_cmake</buildtool_depend>
+	<buildtool_depend>ament_cmake_python</buildtool_depend>
+
+	<build_depend>mobile_manipulation_interfaces</build_depend>
+
+	<depend>rclcpp</depend>
+	<depend>rclcpp_action</depend>
+	<depend>rclcpp_components</depend>
+	<depend>rclpy</depend>
+	<depend>std_msgs</depend>
+	<depend>geometry_msgs</depend>
+	<depend>tf2_geometry_msgs</depend>
+    <depend>igus_rebel_gripper_controller</depend>
+	
+	<test_depend>ament_lint_auto</test_depend>
+	<test_depend>ament_lint_common</test_depend>
+	
+	<export>
+		<build_type>ament_cmake</build_type>
+	</export>
+</package>
