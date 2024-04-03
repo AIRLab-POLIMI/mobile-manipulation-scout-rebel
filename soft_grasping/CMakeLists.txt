@@ -19,11 +19,32 @@ find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(rclcpp_action REQUIRED)
+find_package(tf2_kdl REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(moveit_core REQUIRED)
+find_package(moveit_kinematics REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
+find_package(moveit_visual_tools REQUIRED)
 find_package(mobile_manipulation_interfaces REQUIRED)
+find_package(igus_rebel_gripper_controller REQUIRED)
+find_package(moveit2_servers REQUIRED)
 
 # ----------------------- C++ -----------------------
+include_directories(include)
 
+# grasping pose estimator
+add_executable(grasp_pose_estimator
+	src/grasp_pose_estimator.cpp
+)
+ament_target_dependencies(grasp_pose_estimator
+	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools tf2_kdl moveit_ros_planning_interface
+	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs igus_rebel_gripper_controller
+	mobile_manipulation_interfaces moveit2_servers)
+
+install(TARGETS
+	grasp_pose_estimator
+	DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
 	find_package(ament_lint_auto REQUIRED)
@@ -35,16 +56,16 @@ endif()
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
-install(DIRECTORY
-	launch rviz
-	DESTINATION share/${PROJECT_NAME}
-)
-
 # Install Python executables
 install(PROGRAMS
 	scripts/target_click.py
 	DESTINATION lib/${PROJECT_NAME}
 )
 
+# ----------------------- ROS2 -----------------------
+install(DIRECTORY
+	launch rviz config
+	DESTINATION share/${PROJECT_NAME}
+)
 
 ament_package()

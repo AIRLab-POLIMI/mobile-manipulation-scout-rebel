@@ -242,6 +242,12 @@ public:
 	 * @return the transform stamped from the base frame of the robot to the camera frame
 	 */
 	geometry_msgs::msg::TransformStamped::UniquePtr getTFfromBaseToCamera(void);
+
+	/**
+	 * @brief getter for moveit visual tools object pointer
+	 * @return the moveit visual tools object pointer
+	*/
+	moveit_visual_tools::MoveItVisualTools *getMoveItVisualTools(void);
 };
 
 #endif // MOVEIT2_APIS_HPP

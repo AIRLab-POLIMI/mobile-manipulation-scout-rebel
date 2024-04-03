@@ -825,3 +825,11 @@ geometry_msgs::msg::TransformStamped::UniquePtr MoveIt2APIs::getTFfromBaseToCame
 	}
 	return std::make_unique<geometry_msgs::msg::TransformStamped>(tf_camera_base_msg);
 }
+
+/**
+ * @brief getter for moveit visual tools object pointer
+ * @return the moveit visual tools object pointer
+ */
+moveit_visual_tools::MoveItVisualTools *MoveIt2APIs::getMoveItVisualTools(void) {
+	return this->visual_tools;
+}

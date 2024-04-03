@@ -20,15 +20,15 @@
 	<buildtool_depend>ament_cmake_python</buildtool_depend>
 
 	<build_depend>mobile_manipulation_interfaces</build_depend>
+	<build_depend>moveit2_servers</build_depend>
 
 	<depend>rclcpp</depend>
-	<depend>rclcpp_action</depend>
-	<depend>rclcpp_components</depend>
 	<depend>rclpy</depend>
 	<depend>std_msgs</depend>
 	<depend>geometry_msgs</depend>
 	<depend>tf2_geometry_msgs</depend>
     <depend>igus_rebel_gripper_controller</depend>
+	<depend>moveit_core</depend>
 	
 	<test_depend>ament_lint_auto</test_depend>
 	<test_depend>ament_lint_common</test_depend>
