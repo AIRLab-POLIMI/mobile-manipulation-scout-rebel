@@ -28,9 +28,13 @@ find_package(moveit_visual_tools REQUIRED)
 find_package(mobile_manipulation_interfaces REQUIRED)
 find_package(igus_rebel_gripper_controller REQUIRED)
 find_package(moveit2_servers REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 # ----------------------- C++ -----------------------
-include_directories(include)
+include_directories(include ${OpenCV_INCLUDE_DIRS})
 
 # grasping pose estimator
 add_executable(grasp_pose_estimator
@@ -39,8 +43,10 @@ add_executable(grasp_pose_estimator
 ament_target_dependencies(grasp_pose_estimator
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools tf2_kdl moveit_ros_planning_interface
 	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs igus_rebel_gripper_controller
-	mobile_manipulation_interfaces moveit2_servers)
-
+	mobile_manipulation_interfaces moveit2_servers cv_bridge image_transport OpenCV Eigen3)
+target_link_libraries(grasp_pose_estimator
+	${OpenCV_LIBS}
+)
 install(TARGETS
 	grasp_pose_estimator
 	DESTINATION lib/${PROJECT_NAME}

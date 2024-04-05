@@ -135,7 +135,7 @@ def generate_launch_description():
 
     # delay start of the grasping pose estimator node until the realsense camera node is up and running
     grasping_pose_estimator_node_delayed = TimerAction(
-        period=3.0,
+        period=1.0,
         actions=[
             LaunchDescription([
                 grasping_pose_estimator_node

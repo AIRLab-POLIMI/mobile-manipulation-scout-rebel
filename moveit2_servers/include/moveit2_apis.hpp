@@ -29,6 +29,7 @@
 
 // C++ imports
 #include <cmath>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -47,10 +48,10 @@ private:
 
 	std::string end_effector_link; // toucher_endpoint OR soft_gripper_tip_link
 
-	// the source frame of the aruco markers is the camera frame
-	std::string camera_frame_name;
-
 	std::string root_base_frame; // base footprint or map
+
+	// the source frame of the aruco markers is the camera frame
+	const std::string camera_frame_name;
 
 	// load base arg
 	bool load_base_arg;
@@ -80,20 +81,21 @@ private:
 	const double z_offset = 0.012; // offset [mm] for the z axis to compensate the positioning error
 
 	// planning and moving utilities
-	moveit::planning_interface::MoveGroupInterface *move_group;
+	std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
 	const moveit::core::JointModelGroup *joint_model_group;
 	planning_interface::PlannerManagerPtr planner_instance;
-	planning_scene::PlanningScene *planning_scene;
-	moveit::planning_interface::PlanningSceneInterface *planning_scene_interface_;
+	std::shared_ptr<planning_scene::PlanningScene> planning_scene;
+	std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;
 
 	// rviz visual tools
-	moveit_visual_tools::MoveItVisualTools *visual_tools;
+	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools;
 
 	// this node
 	rclcpp::Node::SharedPtr moveit2_node_;
 
 	// service client for the soft gripper pneumatic pump installed on the robot
 	rclcpp::Client<igus_rebel_gripper_controller::srv::GripperActuation>::SharedPtr pump_service_client;
+	std::mutex pump_control_mutex;
 
 public:
 	/**
@@ -123,6 +125,12 @@ public:
 	 * @return true if the pump service is available, false otherwise
 	 */
 	bool waitForPumpService(void);
+
+	/**
+	 * @brief pump service synchronous calls
+	 * @param cmd the command string to send to the pump service
+	 */
+	void pump_service(std::string cmd);
 
 	/**
 	 * @brief Turn off the pump
@@ -206,7 +214,7 @@ public:
 	 * @brief adds a XYZ offset to the target pose coordinate in the fixed base frame
 	 * @param target_pose the target pose to add the offset to
 	 * @return the target pose with the offset applied
-	*/
+	 */
 	geometry_msgs::msg::PoseStamped::UniquePtr compensateTargetPose(geometry_msgs::msg::PoseStamped::SharedPtr target_pose);
 
 	/**
@@ -246,8 +254,8 @@ public:
 	/**
 	 * @brief getter for moveit visual tools object pointer
 	 * @return the moveit visual tools object pointer
-	*/
-	moveit_visual_tools::MoveItVisualTools *getMoveItVisualTools(void);
+	 */
+	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> getMoveItVisualTools(void);
 };
 
 #endif // MOVEIT2_APIS_HPP

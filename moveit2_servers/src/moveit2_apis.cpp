@@ -5,12 +5,12 @@
  * @brief constructor for the moveit2 apis class
  * @param node_options the node options to use for the moveit2 apis node
  */
-MoveIt2APIs::MoveIt2APIs(const rclcpp::NodeOptions &node_options) : Node("moveit2_apis_node", node_options) {
-	// loads the camera frame name from the aruco detector config file
-	// this->declare_parameter("camera_frame", rclcpp::PARAMETER_STRING);
-	camera_frame_name = this->get_parameter("camera_frame").as_string();
-	if (camera_frame_name != std::string()) {
-		RCLCPP_INFO(LOGGER, "Value of camera frame: %s", camera_frame_name.c_str());
+MoveIt2APIs::MoveIt2APIs(const rclcpp::NodeOptions &node_options) : Node("moveit2_apis_node", node_options),
+																	// loads the camera frame from the aruco detector config file
+																	camera_frame_name(get_parameter("camera_frame").as_string()) {
+
+	if (this->camera_frame_name != std::string()) {
+		RCLCPP_INFO(LOGGER, "Value of camera frame: %s", this->camera_frame_name.c_str());
 	} else {
 		RCLCPP_ERROR(LOGGER, "Failed to get camera frame parameter from config file");
 	}
@@ -40,7 +40,7 @@ void MoveIt2APIs::initPlanner() {
 	robot_model_loader::RobotModelLoaderPtr robot_model_loader(
 		new robot_model_loader::RobotModelLoader(moveit2_node_, "robot_description"));
 
-	move_group = new moveit::planning_interface::MoveGroupInterface(moveit2_node_, PLANNING_GROUP);
+	move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(moveit2_node_, PLANNING_GROUP);
 
 	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
 	// planning_scene_interface_ = &planning_scene_interface;
@@ -103,7 +103,7 @@ void MoveIt2APIs::initPlanner() {
 	RCLCPP_INFO(LOGGER, "%s", joint_names_values.c_str());
 
 	// Using the RobotModel we can construct a PlanningScene that maintains the state of the world (including the robot).
-	planning_scene = new planning_scene::PlanningScene(robot_model);
+	planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model);
 
 	RCLCPP_INFO(LOGGER, "Planner and utilities initialized");
 
@@ -160,7 +160,8 @@ void MoveIt2APIs::initRvizVisualTools() {
 	// and trajectories in RViz as well as debugging tools such as step-by-step introspection of a script.
 	namespace rvt = rviz_visual_tools;
 	// @param node - base frame - markers topic - robot model
-	visual_tools = new moveit_visual_tools::MoveItVisualTools(moveit2_node_, fixed_base_frame, "/rviz_visual_tools", move_group->getRobotModel());
+	visual_tools = std::make_shared<moveit_visual_tools::MoveItVisualTools>(moveit2_node_, fixed_base_frame,
+																			"/rviz_visual_tools", move_group->getRobotModel());
 
 	// extra options
 	visual_tools->setPlanningSceneTopic("/move_group/monitored_planning_scene");
@@ -213,42 +214,39 @@ bool MoveIt2APIs::waitForPumpService() {
 }
 
 /**
+ * @brief pump service synchronous calls
+ * @param cmd the command string to send to the pump service
+ */
+void MoveIt2APIs::pump_service(std::string cmd) {
+	std::unique_lock<std::mutex> lock(pump_control_mutex);
+	auto request = std::make_shared<igus_rebel_gripper_controller::srv::GripperActuation::Request>();
+	request->command = cmd;
+
+	auto result = pump_service_client->async_send_request(request);
+	result.wait();
+	auto response = result.get();
+	RCLCPP_INFO(LOGGER, "Pump control: %s", cmd.c_str());
+}
+
+/**
  * @brief Turn off the pump
  */
 void MoveIt2APIs::pump_off() {
-	auto request = std::make_shared<igus_rebel_gripper_controller::srv::GripperActuation::Request>();
-	request->command = "off";
-
-	auto result = pump_service_client->async_send_request(request);
-	// wait for the result
-	auto response = result.get(); // response is empty
-	RCLCPP_INFO(LOGGER, "Pump turned off");
+	pump_service("off");
 }
 
 /**
  * @brief Turn on the pump and grip the object
  */
 void MoveIt2APIs::pump_grip() {
-	auto request = std::make_shared<igus_rebel_gripper_controller::srv::GripperActuation::Request>();
-	request->command = "grip";
-
-	auto result = pump_service_client->async_send_request(request);
-	// wait for the result
-	auto response = result.get(); // response is empty
-	RCLCPP_INFO(LOGGER, "Pump on: gripped position");
+	pump_service("grip");
 }
 
 /**
  * @brief Turn on the pump and release the object
  */
 void MoveIt2APIs::pump_release() {
-	auto request = std::make_shared<igus_rebel_gripper_controller::srv::GripperActuation::Request>();
-	request->command = "release";
-
-	auto result = pump_service_client->async_send_request(request);
-	// wait for the result
-	auto response = result.get(); // response is empty
-	RCLCPP_INFO(LOGGER, "Pump on: released position");
+	pump_service("release");
 }
 
 /**
@@ -814,7 +812,7 @@ bool MoveIt2APIs::getLoadBaseArg(void) {
  * @brief compute TF from the base frame of the robot to the camera frame
  * @return the transform stamped from the base frame of the robot to the camera frame
  */
-geometry_msgs::msg::TransformStamped::UniquePtr MoveIt2APIs::getTFfromBaseToCamera(void) {
+geometry_msgs::msg::TransformStamped::UniquePtr MoveIt2APIs::getTFfromBaseToCamera() {
 	// transform the poses of the aruco markers with respect to the fixed base frame of reference
 	geometry_msgs::msg::TransformStamped tf_camera_base_msg;
 	try {
@@ -830,6 +828,6 @@ geometry_msgs::msg::TransformStamped::UniquePtr MoveIt2APIs::getTFfromBaseToCame
  * @brief getter for moveit visual tools object pointer
  * @return the moveit visual tools object pointer
  */
-moveit_visual_tools::MoveItVisualTools *MoveIt2APIs::getMoveItVisualTools(void) {
+std::shared_ptr<moveit_visual_tools::MoveItVisualTools> MoveIt2APIs::getMoveItVisualTools(void) {
 	return this->visual_tools;
 }

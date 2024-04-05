@@ -29,8 +29,6 @@ GraspPoseEstimator::GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api,
 
 	// save moveit2 apis object reference
 	this->moveit2_api_ = moveit2_api;
-
-	this->visual_tools = this->moveit2_api_->getMoveItVisualTools();
 }
 
 /**
@@ -50,6 +48,14 @@ void GraspPoseEstimator::initParams() {
 	RCLCPP_INFO(logger_, "camera_rgb_frame: %s", camera_rgb_frame.c_str());
 	RCLCPP_INFO(logger_, "camera_depth_frame: %s", camera_depth_frame.c_str());
 	RCLCPP_INFO(logger_, "depth_topic: %s", depth_topic.c_str());
+}
+
+/**
+ * @brief Initialize the visual tools for rviz visualization
+ * @param visual_tools shared pointer to MoveItVisualTools object
+ */
+void GraspPoseEstimator::setVisualTools(std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools) {
+	this->visual_tools_ = visual_tools;
 }
 
 /**
@@ -91,6 +97,9 @@ void GraspPoseEstimator::camera_info_callback(const sensor_msgs::msg::CameraInfo
 	// fill rectification matrix
 	rectification_matrix = std::array<double, 9>(msg->r);
 
+	depth_map = std::make_shared<cv::Mat>(image_width, image_height, CV_16UC1);
+	depth_map_saved = std::make_shared<cv::Mat>(image_width, image_height, CV_16UC1);
+
 	// log camera info parameters
 	RCLCPP_INFO(logger_, "Received camera info message");
 
@@ -103,10 +112,38 @@ void GraspPoseEstimator::camera_info_callback(const sensor_msgs::msg::CameraInfo
  * @param msg depth map message
  */
 void GraspPoseEstimator::depth_map_callback(const sensor_msgs::msg::Image::SharedPtr msg) {
+	// bridge the depth map message to cv::Mat
+	cv_bridge::CvImagePtr cv_ptr;
+	try {
+		cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_16UC1);
+
+	} catch (cv_bridge::Exception &e) {
+		RCLCPP_ERROR(logger_, "cv_bridge exception: %s", e.what());
+		return;
+	}
 	{
 		std::lock_guard<std::mutex> lock(depth_map_mutex);
-		depth_map = *msg;
+		*depth_map = cv_ptr->image;
 	}
+}
+
+/**
+ * @brief move to static ready position: joint space goal where to look for a ball to be picked up
+ */
+void GraspPoseEstimator::moveToReadyPose() {
+	const std::vector<double> ready_pose = {M_PI / 3.0, -M_PI / 3.0, 75.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
+	moveit2_api_->robotPlanAndMove(ready_pose);
+}
+
+/**
+ * @brief drop the picked ball in the container put aside to the mobile robot
+ */
+void GraspPoseEstimator::dropBallToContainer() {
+	const std::vector<double> ready_pose = {150.0 * M_PI / 180.0, 40.0 * M_PI / 180.0, 50.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
+	moveit2_api_->robotPlanAndMove(ready_pose);
+	moveit2_api_->pump_release();
+	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+	moveit2_api_->pump_off();
 }
 
 /**
@@ -115,42 +152,71 @@ void GraspPoseEstimator::depth_map_callback(const sensor_msgs::msg::Image::Share
  */
 void GraspPoseEstimator::mainThread() {
 	// set the rate for the main thread
-	rclcpp::Rate rate(10);
+	rclcpp::Rate rate(15);
+
+	moveToReadyPose();
+
+	int x = 0, y = 0;
 
 	while (rclcpp::ok()) {
 		// check for updates in object coordinates
 		// estimate the grasp pose
 		// publish the grasp pose
 
+		int x_temp = 0, y_temp = 0;
 		// save object center pixel coordinates
-		int x, y;
 		{ // acquire lock on object pixel coordinates
 			std::lock_guard<std::mutex> lock(object_coords_mutex);
 			if (object_x != 0 && object_y != 0) {
-				x = object_x;
-				y = object_y;
+				x_temp = object_x;
+				y_temp = object_y;
 			}
 		}
 
 		// if object coordinates are not received, wait for the next iteration
-		if (x == 0 && y == 0) {
+		if (x_temp == 0 && y_temp == 0) {
 			rate.sleep();
 			continue;
+		} else if (x_temp == x && y_temp == y) {
+			// if the object coordinates are the same as the previous iteration, wait for the next iteration
+			rate.sleep();
+			continue;
+		} else {
+			// update the object coordinates
+			x = x_temp;
+			y = y_temp;
 		}
 
 		// save depth map
-		sensor_msgs::msg::Image depth_map_temp;
 		{ // acquire lock on depth map
 			std::lock_guard<std::mutex> lock(depth_map_mutex);
-			depth_map_temp = this->depth_map;
+			depth_map->copyTo(*depth_map_saved);
 		}
-		depth_map_saved = std::make_shared<sensor_msgs::msg::Image>(depth_map_temp);
 
 		// estimate grasp pose from the center pixel coordinate
-		geometry_msgs::msg::PoseStamped grasp_pose = estimateGraspingPose(x, y);
+		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose =
+			std::make_shared<geometry_msgs::msg::PoseStamped>(estimateGraspingPose(x, y));
+
+		// transform the grasp pose from the camera frame to the robot base frame
+		geometry_msgs::msg::TransformStamped tf_camera_base = *moveit2_api_->getTFfromBaseToCamera();
+		std::shared_ptr<geometry_msgs::msg::PoseStamped> grasp_pose_base = std::make_shared<geometry_msgs::msg::PoseStamped>();
+		tf2::doTransform(*grasp_pose, *grasp_pose_base, tf_camera_base);
 
 		// publish the grasp pose
-		grasp_pose_publisher->publish(grasp_pose);
+		grasp_pose_publisher->publish(*grasp_pose_base);
+
+		// first open with the gripper for picking up the ball
+		moveit2_api_->pump_release();
+		// then move to the grasping pose
+		moveit2_api_->robotPlanAndMove(grasp_pose_base);
+		// then grip the ball
+		moveit2_api_->pump_grip();
+
+		moveToReadyPose();
+
+		dropBallToContainer();
+
+		moveToReadyPose();
 
 		rate.sleep();
 	}
@@ -163,14 +229,24 @@ void GraspPoseEstimator::mainThread() {
  * @return geometry_msgs::msg::PoseStamped estimated grasp pose
  */
 geometry_msgs::msg::PoseStamped GraspPoseEstimator::estimateGraspingPose(int x, int y) {
+	RCLCPP_INFO(logger_, "Estimating grasp pose for object at pixel coordinates: x=%d, y=%d", x, y);
+
 	// compute 3D point in the camera frame from the pixel coordinates
 	geometry_msgs::msg::Point p_closest = computePointCloud(x, y);
+	visualizePoint(p_closest, rviz_visual_tools::ORANGE);
 
 	// compute the center of the ball given the closest point to the camera
 	geometry_msgs::msg::Point ball_center = computeBallCenter(p_closest);
+	RCLCPP_INFO(logger_, "Estimated ball center: x=%f, y=%f, z=%f", ball_center.x, ball_center.y, ball_center.z);
+	visualizePoint(ball_center);
 
 	// compute the grasp pose from the center of the ball
 	auto grasp_sample_poses = generateSamplingGraspingPoses(ball_center);
+	visualizePoses(grasp_sample_poses);
+
+	// wait 100ms then clear the rviz visual tools
+	// std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	visual_tools_->deleteAllMarkers();
 
 	// return the first grasp pose
 	geometry_msgs::msg::PoseStamped grasp_pose = grasp_sample_poses[0];
@@ -187,7 +263,7 @@ geometry_msgs::msg::Point GraspPoseEstimator::computePointCloud(int x, int y) {
 	// compute the 3D point in the camera frame, from the pixel coordinates x, y
 	// using the camera intrinsic parameters and depth map value at x, y
 	geometry_msgs::msg::Point p;
-	float depth = depth_map_saved->data[y * image_width + x];
+	float depth = (float)depth_map_saved->at<uint16_t>(y, x) * depth_scale;
 	p.x = (x - cx) * depth / fx;
 	p.y = (y - cy) * depth / fy;
 	p.z = depth;
@@ -226,11 +302,11 @@ geometry_msgs::msg::Point GraspPoseEstimator::computeBallCenter(geometry_msgs::m
 	geometry_msgs::msg::Point ball_center;
 
 	// get vector from camera to the closest point
-	tf2::Vector3 v_p(p_closest.x, p_closest.y, p_closest.z);
+	Eigen::Vector3f v_p(p_closest.x, p_closest.y, p_closest.z);
 	// vector from closest point to the ball center
-	tf2::Vector3 v_r = v_p.normalize() * ball_radius;
-	// ball center vector from camera
-	tf2::Vector3 v_c = v_p + v_r;
+	Eigen::Vector3f v_r = ball_radius * v_p.normalized();
+	// ball center vector from camera: pointwise sum of components
+	Eigen::Vector3f v_c = v_p + v_r;
 
 	// fill ball center point
 	ball_center.x = v_c.x();
@@ -243,6 +319,7 @@ geometry_msgs::msg::Point GraspPoseEstimator::computeBallCenter(geometry_msgs::m
 /**
  * @brief Generate sampling grasping poses around the ball center
  * @param ball_center estimated center of the ball
+	grasp_pose.header.stamp = this->now();
  * @return std::vector<geometry_msgs::msg::PoseStamped> sampling grasping poses
  */
 std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplingGraspingPoses(
@@ -255,13 +332,37 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 	grasp_pose.header.frame_id = camera_depth_frame;
 	grasp_pose.header.stamp = this->now();
 
+	// vector from the origin to the ball center
+	Eigen::Vector3f v_center(ball_center.x, ball_center.y, ball_center.z);
+
 	// vector from ball center to grasping point, placed at grasping_distance from the ball center
-	// at an angle of 0 degrees from the y-axis, and 0 degrees from the z-axis
-	tf2::Vector3 v_grasp(0, grasping_distance, 0);
-	tf2::Vector3 v_center(ball_center.x, ball_center.y, ball_center.z);
-	tf2::Vector3 v_grasp_point = v_center + v_grasp;
-	// create quaternion from the vector
-	tf2::Quaternion q_grasp(v_grasp_point, 0.0);
+	// at an angle of theta radians from the axis looking at the ball center
+	float theta = 0.0 * M_PI / 180.0;
+	Eigen::Vector3f v_grasp = -v_center.normalized() * grasping_distance * std::cos(theta);
+	v_grasp = v_grasp + Eigen::Vector3f(0.0, -1.0, 0.0) * grasping_distance * std::sin(theta);
+
+	// vector from the origin to the grasping position
+	Eigen::Vector3f v_grasp_point = v_center + v_grasp;
+
+	// x, y, z axes of the grasp rotation matrix
+	// x component of the rotation matrix
+	Eigen::Vector3f v_grasp_x = -v_grasp.normalized(); // vector from the ball center to the grasping point
+
+	// y component of the rotation matrix
+	// intersection of the XZ plane and the plane orthogonal to the v_grasp_x vector
+	Eigen::Vector3f plane_xz(0.0, -1.0, 0.0); // XZ plane -> orthogonal to y axis pointing upwards
+	Eigen::Vector3f v_grasp_y = plane_xz.cross(v_grasp_x);
+
+	// z component of the rotation matrix
+	Eigen::Vector3f v_grasp_z = v_grasp_x.cross(v_grasp_y);
+
+	// construct the rotation matrix from the grasp vectors
+	Eigen::Matrix3f rot_grasp;
+	rot_grasp << v_grasp_x, v_grasp_y, v_grasp_z;
+
+	// quaternion for the grasp pose orientation
+	Eigen::Quaternionf q_grasp(rot_grasp);
+	q_grasp.normalize();
 
 	// fill the grasp pose
 	grasp_pose.pose.position.x = v_grasp_point.x();
@@ -277,6 +378,35 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 	return grasping_poses;
 }
 
+/**
+ * @brief visualize point in rviz visual tools
+ * @param point point to visualize
+ * @param color color of the point
+ */
+void GraspPoseEstimator::visualizePoint(geometry_msgs::msg::Point point, rviz_visual_tools::Colors color) {
+	// visualize the point in rviz
+	visual_tools_->setBaseFrame(camera_rgb_frame);
+	if (color == rviz_visual_tools::BLUE) {
+		visual_tools_->publishSphere(point, color, rviz_visual_tools::XLARGE);
+	} else {
+		visual_tools_->publishSphere(point, color, rviz_visual_tools::LARGE);
+	}
+	visual_tools_->trigger();
+}
+
+/**
+ * @brief visualize multiple poses in rviz visual tools
+ * @param poses poses to visualize
+ */
+void GraspPoseEstimator::visualizePoses(std::vector<geometry_msgs::msg::PoseStamped> poses) {
+	// visualize the poses in rviz
+	visual_tools_->setBaseFrame(camera_rgb_frame);
+	for (auto pose : poses) {
+		visual_tools_->publishAxis(pose.pose, rviz_visual_tools::LARGE);
+	}
+	visual_tools_->trigger();
+}
+
 int main(int argc, char *argv[]) {
 	rclcpp::init(argc, argv);
 
@@ -288,8 +418,8 @@ int main(int argc, char *argv[]) {
 	auto moveit2_apis_node = std::make_shared<MoveIt2APIs>(node_options);
 	auto grasp_pose_estimator_node = std::make_shared<GraspPoseEstimator>(moveit2_apis_node, node_options);
 
+	// asynchronous multi-threaded executor for spinning the nodes in separate threads
 	rclcpp::executors::MultiThreadedExecutor executor;
-
 	auto main_thread = std::make_unique<std::thread>([&executor, &grasp_pose_estimator_node, &moveit2_apis_node]() {
 		executor.add_node(grasp_pose_estimator_node->get_node_base_interface());
 		executor.add_node(moveit2_apis_node->get_node_base_interface());
@@ -302,9 +432,13 @@ int main(int argc, char *argv[]) {
 	// initialize visual tools for drawing on rviz
 	moveit2_apis_node->initRvizVisualTools();
 
+	// set the visual tools pointer for the grasp pose estimator node
+	grasp_pose_estimator_node->setVisualTools(moveit2_apis_node->getMoveItVisualTools());
+
 	// initialize the soft gripper pneumatic pump service
 	moveit2_apis_node->waitForPumpService();
 
+	// start the main thread for the grasp pose estimator node to estimate the grasp pose from object coordinates
 	std::thread grasp_pose_estimator_thread = std::thread(&GraspPoseEstimator::mainThread, grasp_pose_estimator_node);
 	grasp_pose_estimator_thread.detach();
 

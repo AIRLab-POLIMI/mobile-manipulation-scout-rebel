@@ -20,6 +20,13 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <cmath>
+#include <Eigen/Dense>
+
+// OpenCV includes
+#include <cv_bridge/cv_bridge.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
 
 // MoveIt2 custom APIs
 #include "moveit2_apis.hpp"
@@ -40,6 +47,12 @@ public:
 	 * @brief Initialize parameters read from the yaml config file
 	 */
 	void initParams();
+
+	/**
+	 * @brief Initialize the visual tools for rviz visualization
+	 * @param visual_tools shared pointer to MoveItVisualTools object
+	*/
+	void setVisualTools(std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools);
 
 	/**
 	 * @brief Callback function for receiving object coordinates from /object_coords topic
@@ -65,6 +78,16 @@ public:
 	 * 	This thread checks for updates in object coordinates and estimates the grasp pose
 	 */
 	void mainThread();
+
+	/**
+	 * @brief move to static ready position: joint space goal where to look for a ball to be picked up
+	*/
+	void moveToReadyPose();
+
+	/**
+	 * @brief drop the picked ball in the container put aside to the mobile robot
+	*/
+	void dropBallToContainer();
 
 	/**
 	 * @brief Estimates the grasp pose for the object at the given coordinates
@@ -109,15 +132,15 @@ public:
 	/**
 	 * @brief visualize point in rviz visual tools
 	 * @param point point to visualize
-	*/
-	void visualizePoint(geometry_msgs::msg::Point point);
+	 * @param color color of the point
+	 */
+	void visualizePoint(geometry_msgs::msg::Point point, rviz_visual_tools::Colors color = rviz_visual_tools::BLUE);
 
 	/**
 	 * @brief visualize multiple poses in rviz visual tools
 	 * @param poses poses to visualize
-	*/
+	 */
 	void visualizePoses(std::vector<geometry_msgs::msg::PoseStamped> poses);
-
 
 private:
 	// subscription to /object_coords topic
@@ -136,7 +159,7 @@ private:
 	std::shared_ptr<MoveIt2APIs> moveit2_api_;
 
 	// visual tools for rviz visualization
-	moveit_visual_tools::MoveItVisualTools *visual_tools;
+	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools_;
 
 	// the frame in which the grasp pose coordinates are expressed
 	const std::string fixed_base_frame = "igus_rebel_base_link";
@@ -158,20 +181,19 @@ private:
 	int image_width, image_height;				// image dimensions
 	float fx, fy, cx, cy;						// focal length and principal point
 	std::vector<double> distortion;				// radial and tangential distortion coefficients
-	float depth_scale;							// depth map scale factor
+	const float depth_scale = 0.001;			// depth map scale factor: convert mm to m
 	std::array<double, 12> projection_matrix;	// projection matrix
 	std::array<double, 9> rectification_matrix; // intrinsic matrix
 
-	// camera depth map
-	sensor_msgs::msg::Image depth_map;
-	sensor_msgs::msg::Image::SharedPtr depth_map_saved;
+	// camera depth map using openCV2 bridged matrix image
+	std::shared_ptr<cv::Mat> depth_map;
+	std::shared_ptr<cv::Mat> depth_map_saved;
 
 	// mutex lock for depth map access
 	std::mutex depth_map_mutex;
 
 	const float ball_radius = 0.03; // ball radius in meters
-
-	const float grasping_distance = 0.06;
+	const float grasping_distance = 0.03; // distance from the ball center to grasp pose
 
 	const int n_grasp_sample_poses = 8; // number of sampling grasping poses
 };
