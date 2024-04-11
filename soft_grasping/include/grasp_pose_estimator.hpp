@@ -130,6 +130,21 @@ public:
 	std::vector<geometry_msgs::msg::PoseStamped> generateSamplingGraspingPoses(geometry_msgs::msg::Point ball_center);
 
 	/**
+	 * @brief compute the grasping pose given the ball center and the theta angle
+	 * @param ball_center estimated pose of center of the ball
+	 * @param theta angle of the grasping pose from the longitudinal axis from origin to the ball center
+	 * @return geometry_msgs::msg::PoseStamped grasping pose
+	*/
+	geometry_msgs::msg::PoseStamped computeGraspingPose(geometry_msgs::msg::Point ball_center, float theta);
+
+	/**
+	 * @brief choose the most suitable grasping pose among the sampling poses
+	 * @param poses valid sampled grasping poses vector
+	 * @return geometry_msgs::msg::PoseStamped the most suitable grasping pose
+	*/
+	geometry_msgs::msg::PoseStamped chooseGraspingPose(std::vector<geometry_msgs::msg::PoseStamped> poses);
+
+	/**
 	 * @brief visualize point in rviz visual tools
 	 * @param point point to visualize
 	 * @param color color of the point
@@ -193,7 +208,7 @@ private:
 	std::mutex depth_map_mutex;
 
 	const float ball_radius = 0.03; // ball radius in meters
-	const float grasping_distance = 0.03; // distance from the ball center to grasp pose
+	const float grasping_distance = 0.04; // distance from the ball center to grasp pose
 
-	const int n_grasp_sample_poses = 8; // number of sampling grasping poses
+	const int n_grasp_sample_poses = 20; // number of sampling grasping poses
 };

@@ -15,7 +15,6 @@
 #include <tf2_ros/transform_listener.h>
 
 // MoveIt2 imports
-// #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_interface/planning_interface.h>
 #include <moveit/planning_pipeline/planning_pipeline.h>
@@ -71,7 +70,7 @@ private:
 	const float max_velocity_scaling_cartesian_space = 0.4;
 	const float max_acceleration_scaling = 0.1;
 	const short n_max_retries = 3;
-	const float timeout_seconds = 2.0;
+	const float timeout_seconds = 1.0;
 
 	// parameters for linear planning movement in cartesian path
 	const double jump_threshold = 0.0; // 0.0 disables jump threshold
@@ -86,6 +85,8 @@ private:
 	planning_interface::PlannerManagerPtr planner_instance;
 	std::shared_ptr<planning_scene::PlanningScene> planning_scene;
 	std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;
+	moveit::core::RobotStatePtr robot_state;
+	moveit::core::RobotModelPtr robot_model;
 
 	// rviz visual tools
 	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools;
@@ -209,6 +210,20 @@ public:
 	 * @return true if plan and movement were successful, false otherwise
 	 */
 	bool robotPlanAndMove(std::vector<double> joint_space_goal);
+
+	/**
+	 * @brief add position and orientation constraints to the planning, so to produce a linear path
+	 * @param target_pose the target pose of reference for the constraints
+	 * @return the contraints to add to the path planning via move group interface
+	*/
+	moveit_msgs::msg::Constraints addLinearPathConstraints(geometry_msgs::msg::PoseStamped::SharedPtr target_pose);
+
+	/**
+	 * @brief use Inverse Kinematics solver library to check if a given pose has a valid IK solution
+	 * @param pose the pose to check for a valid IK solution
+	 * @return bool whether the pose has a valid IK solution or not, given the set tolerances
+	*/
+	bool checkIKSolution(geometry_msgs::msg::PoseStamped pose);
 
 	/**
 	 * @brief adds a XYZ offset to the target pose coordinate in the fixed base frame

@@ -142,7 +142,6 @@ void GraspPoseEstimator::dropBallToContainer() {
 	const std::vector<double> ready_pose = {150.0 * M_PI / 180.0, 40.0 * M_PI / 180.0, 50.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
 	moveit2_api_->robotPlanAndMove(ready_pose);
 	moveit2_api_->pump_release();
-	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	moveit2_api_->pump_off();
 }
 
@@ -197,25 +196,36 @@ void GraspPoseEstimator::mainThread() {
 		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose =
 			std::make_shared<geometry_msgs::msg::PoseStamped>(estimateGraspingPose(x, y));
 
-		// transform the grasp pose from the camera frame to the robot base frame
-		geometry_msgs::msg::TransformStamped tf_camera_base = *moveit2_api_->getTFfromBaseToCamera();
-		std::shared_ptr<geometry_msgs::msg::PoseStamped> grasp_pose_base = std::make_shared<geometry_msgs::msg::PoseStamped>();
-		tf2::doTransform(*grasp_pose, *grasp_pose_base, tf_camera_base);
+		// empty grasp pose, wait for new input
+		if (grasp_pose->pose.position.x == 0 && grasp_pose->pose.position.y == 0 &&
+			grasp_pose->pose.position.z == 0) {
+			RCLCPP_ERROR(logger_, "Failed to estimate feasible grasping pose");
+			continue;
+		}
 
 		// publish the grasp pose
-		grasp_pose_publisher->publish(*grasp_pose_base);
+		grasp_pose_publisher->publish(*grasp_pose);
 
 		// first open with the gripper for picking up the ball
 		moveit2_api_->pump_release();
+
 		// then move to the grasping pose
-		moveit2_api_->robotPlanAndMove(grasp_pose_base);
+		bool success = moveit2_api_->robotPlanAndMove(grasp_pose);
+
+		// wait for new input if the move to the grasping pose fails
+		if (!success) {
+			RCLCPP_ERROR(logger_, "Failed to move to the grasping pose");
+			moveit2_api_->pump_off();
+			continue;
+		}
+
 		// then grip the ball
 		moveit2_api_->pump_grip();
-
+		// move back to the ready pose
 		moveToReadyPose();
-
+		// drop the ball to the container: release then turn off the pump
 		dropBallToContainer();
-
+		// move back to the ready pose, ready for the next ball
 		moveToReadyPose();
 
 		rate.sleep();
@@ -244,12 +254,16 @@ geometry_msgs::msg::PoseStamped GraspPoseEstimator::estimateGraspingPose(int x, 
 	auto grasp_sample_poses = generateSamplingGraspingPoses(ball_center);
 	visualizePoses(grasp_sample_poses);
 
-	// wait 100ms then clear the rviz visual tools
-	// std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	visual_tools_->deleteAllMarkers();
 
-	// return the first grasp pose
-	geometry_msgs::msg::PoseStamped grasp_pose = grasp_sample_poses[0];
+	if (grasp_sample_poses.empty()) {
+		RCLCPP_ERROR(logger_, "No grasping poses found");
+		geometry_msgs::msg::PoseStamped empty_pose;
+		return empty_pose;
+	}
+
+	// return a valid grasping pose
+	geometry_msgs::msg::PoseStamped grasp_pose = chooseGraspingPose(grasp_sample_poses);
 	return grasp_pose;
 }
 
@@ -318,8 +332,7 @@ geometry_msgs::msg::Point GraspPoseEstimator::computeBallCenter(geometry_msgs::m
 
 /**
  * @brief Generate sampling grasping poses around the ball center
- * @param ball_center estimated center of the ball
-	grasp_pose.header.stamp = this->now();
+ * @param ball_center estimated center of the ball, in the camera frame of reference
  * @return std::vector<geometry_msgs::msg::PoseStamped> sampling grasping poses
  */
 std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplingGraspingPoses(
@@ -327,9 +340,47 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 	// generate sampling grasping poses around the ball center
 	std::vector<geometry_msgs::msg::PoseStamped> grasping_poses;
 
+	// transform the grasp pose from the camera frame to the robot base frame
+	geometry_msgs::msg::TransformStamped tf_camera_base = *moveit2_api_->getTFfromBaseToCamera();
+
+	// transform the ball center position from the camera frame to the robot base frame
+	// this will set the origin to the robot base frame
+	geometry_msgs::msg::Point ball_center_base;
+	tf2::doTransform(ball_center, ball_center_base, tf_camera_base);
+
+	float theta_min = -150.0 * M_PI / 180.0, theta_max = 45.0 * M_PI / 180.0;
+	for (int i = 0; i < n_grasp_sample_poses; i++) {
+		// angle sampled from theta_min to theta_max
+		float theta = theta_min + i * (theta_max - theta_min) / (n_grasp_sample_poses - 1);
+		// compute the grasping pose at given theta angle
+		geometry_msgs::msg::PoseStamped grasp_pose = computeGraspingPose(ball_center_base, theta);
+
+		// check if IK solution exists for the grasp pose
+		if (!moveit2_api_->checkIKSolution(grasp_pose)) {
+			RCLCPP_INFO(logger_, "No IK solution found for theta %f", theta);
+			continue;
+		} else {
+			RCLCPP_INFO(logger_, "IK solution found for theta %f", theta);
+		}
+
+		// add the grasping pose to the list
+		grasping_poses.push_back(grasp_pose);
+	}
+
+	return grasping_poses;
+}
+
+/**
+ * @brief compute the grasping pose given the ball center in the fixed frame of reference and the theta angle
+ * @param ball_center estimated pose of center of the ball
+ * @param theta angle of the grasping pose from the longitudinal axis from origin to the ball center
+ * @return geometry_msgs::msg::PoseStamped grasping pose
+ */
+geometry_msgs::msg::PoseStamped GraspPoseEstimator::computeGraspingPose(geometry_msgs::msg::Point ball_center,
+																		float theta) {
 	// generate first sampling pose
 	geometry_msgs::msg::PoseStamped grasp_pose;
-	grasp_pose.header.frame_id = camera_depth_frame;
+	grasp_pose.header.frame_id = fixed_base_frame;
 	grasp_pose.header.stamp = this->now();
 
 	// vector from the origin to the ball center
@@ -337,9 +388,15 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 
 	// vector from ball center to grasping point, placed at grasping_distance from the ball center
 	// at an angle of theta radians from the axis looking at the ball center
-	float theta = 0.0 * M_PI / 180.0;
-	Eigen::Vector3f v_grasp = -v_center.normalized() * grasping_distance * std::cos(theta);
-	v_grasp = v_grasp + Eigen::Vector3f(0.0, -1.0, 0.0) * grasping_distance * std::sin(theta);
+	Eigen::Vector3f v_grasp_longitudinal = -v_center.normalized() * grasping_distance * std::cos(theta);
+	Eigen::Vector3f plane_vertical(v_center.x(), v_center.y(), 0.0); // vertical plane
+	// vertical component of the grasping vector, orthogonal to the v_center vector, pointing upwards
+	Eigen::Vector3f v_grasp_vertical = v_center.cross(plane_vertical.normalized()).normalized().cross(v_center.normalized());
+	v_grasp_vertical = v_grasp_vertical * grasping_distance * std::sin(theta); // vertical component
+
+	// final grasping vector, from the ball center to the grasping point
+	// sum of the longitudinal and vertical components
+	Eigen::Vector3f v_grasp = v_grasp_longitudinal + v_grasp_vertical;
 
 	// vector from the origin to the grasping position
 	Eigen::Vector3f v_grasp_point = v_center + v_grasp;
@@ -350,8 +407,8 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 
 	// y component of the rotation matrix
 	// intersection of the XZ plane and the plane orthogonal to the v_grasp_x vector
-	Eigen::Vector3f plane_xz(0.0, -1.0, 0.0); // XZ plane -> orthogonal to y axis pointing upwards
-	Eigen::Vector3f v_grasp_y = plane_xz.cross(v_grasp_x);
+	Eigen::Vector3f plane_xy(0.0, 0.0, 1.0); // XY plane -> orthogonal to z axis pointing upwards
+	Eigen::Vector3f v_grasp_y = plane_xy.cross(v_grasp_x);
 
 	// z component of the rotation matrix
 	Eigen::Vector3f v_grasp_z = v_grasp_x.cross(v_grasp_y);
@@ -373,9 +430,20 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 	grasp_pose.pose.orientation.z = q_grasp.z();
 	grasp_pose.pose.orientation.w = q_grasp.w();
 
-	grasping_poses.push_back(grasp_pose);
+	return grasp_pose;
+}
 
-	return grasping_poses;
+/**
+ * @brief choose the most suitable grasping pose among the sampling poses
+ * @param poses valid sampled grasping poses vector
+ * @return geometry_msgs::msg::PoseStamped the most suitable grasping pose
+ */
+geometry_msgs::msg::PoseStamped GraspPoseEstimator::chooseGraspingPose(std::vector<geometry_msgs::msg::PoseStamped> poses) {
+	// choose the most suitable grasping pose among the sampling poses
+	geometry_msgs::msg::PoseStamped grasp_pose;
+	// choose middle pose
+	grasp_pose = poses[poses.size() / 2];
+	return grasp_pose;
 }
 
 /**
@@ -385,7 +453,7 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
  */
 void GraspPoseEstimator::visualizePoint(geometry_msgs::msg::Point point, rviz_visual_tools::Colors color) {
 	// visualize the point in rviz
-	visual_tools_->setBaseFrame(camera_rgb_frame);
+	visual_tools_->setBaseFrame(camera_depth_frame);
 	if (color == rviz_visual_tools::BLUE) {
 		visual_tools_->publishSphere(point, color, rviz_visual_tools::XLARGE);
 	} else {
@@ -400,9 +468,9 @@ void GraspPoseEstimator::visualizePoint(geometry_msgs::msg::Point point, rviz_vi
  */
 void GraspPoseEstimator::visualizePoses(std::vector<geometry_msgs::msg::PoseStamped> poses) {
 	// visualize the poses in rviz
-	visual_tools_->setBaseFrame(camera_rgb_frame);
+	visual_tools_->setBaseFrame(fixed_base_frame);
 	for (auto pose : poses) {
-		visual_tools_->publishAxis(pose.pose, rviz_visual_tools::LARGE);
+		visual_tools_->publishAxis(pose.pose, rviz_visual_tools::MEDIUM);
 	}
 	visual_tools_->trigger();
 }

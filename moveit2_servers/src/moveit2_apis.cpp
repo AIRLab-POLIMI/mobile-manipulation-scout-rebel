@@ -64,10 +64,10 @@ void MoveIt2APIs::initPlanner() {
 	}
 
 	// We can also use the RobotModelLoader to get a robot model which contains the robot's kinematic information
-	const moveit::core::RobotModelPtr &robot_model = robot_model_loader->getModel();
+	robot_model = robot_model_loader->getModel();
 
 	// Create a RobotState and JointModelGroup to keep track of the current robot pose and planning group
-	moveit::core::RobotStatePtr robot_state(new moveit::core::RobotState(robot_model));
+	robot_state = std::make_shared<moveit::core::RobotState>(robot_model);
 
 	move_group->setStartState(*robot_state);
 
@@ -177,7 +177,7 @@ void MoveIt2APIs::initRvizVisualTools() {
 	// RViz provides many types of markers, in this demo we will use text, cylinders, and spheres
 	Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
 	text_pose.translation().z() = 1.0;
-	visual_tools->publishText(text_pose, "Button Presser Demo", rvt::WHITE, rvt::XXLARGE);
+	visual_tools->publishText(text_pose, "MoveIt2 C++ APIs", rvt::WHITE, rvt::XXLARGE);
 
 	// Batch publishing is used to reduce the number of messages being sent to RViz for large visualizations
 	visual_tools->trigger();
@@ -430,6 +430,11 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
 	// apply offset compensation to the cartesian space target pose
 	geometry_msgs::msg::PoseStamped::UniquePtr compensated_target_pose = compensateTargetPose(target_pose);
 
+	if (!checkIKSolution(*compensated_target_pose)) {
+		RCLCPP_ERROR(LOGGER, "No valid IK solution for the target pose");
+		return false;
+	}
+
 	// publish a coordinate axis corresponding to the pose with rviz visual tools
 	visual_tools->setBaseFrame(fixed_base_frame);
 	visual_tools->publishAxisLabeled(compensated_target_pose->pose, "target");
@@ -449,56 +454,7 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
 
 	/*
 	if (planar_movement) {
-		// set orientation constraint during movement to make fixed end effector orientation
-
-		// constraint on the orientation of the end effector
-		moveit_msgs::msg::OrientationConstraint constrained_orientation;
-		constrained_orientation.link_name = end_effector_link;
-		constrained_orientation.header.frame_id = fixed_base_frame;
-		// maintain same orientation as the target pose
-		constrained_orientation.orientation = target_pose->pose.orientation;
-		constrained_orientation.absolute_x_axis_tolerance = 1.0;
-		constrained_orientation.absolute_y_axis_tolerance = 1.0;
-		constrained_orientation.absolute_z_axis_tolerance = 1.0;
-		constrained_orientation.weight = 1.0;
-
-		// constraint on the position of the end effector --> planar movement along a line
-		moveit_msgs::msg::PositionConstraint constrained_position;
-		constrained_position.link_name = end_effector_link;
-		constrained_position.header.frame_id = fixed_base_frame;
-		constrained_position.target_point_offset.x = 0.1;
-		constrained_position.target_point_offset.y = 0.1;
-		constrained_position.target_point_offset.z = 0.1;
-		constrained_position.weight = 1.0;
-		// create line shape constraint (approximated as a box)
-		shape_msgs::msg::SolidPrimitive line;
-		line.type = shape_msgs::msg::SolidPrimitive::BOX;
-		line.dimensions = {0.3, 0.1, 0.1}; // dimensions in meters: x, y, z
-		constrained_position.constraint_region.primitives.emplace_back(line);
-
-		// define the pose of the line shape constraint
-		geometry_msgs::msg::Pose line_pose;
-		line_pose.position.x = target_pose->pose.position.x;
-		line_pose.position.y = target_pose->pose.position.y;
-		line_pose.position.z = target_pose->pose.position.z;
-		line_pose.orientation = target_pose->pose.orientation;
-		constrained_position.constraint_region.primitive_poses.emplace_back(line_pose);
-
-		// convert target pose into isometry 3d
-		Eigen::Isometry3d target_pose_iso3d;
-		tf2::fromMsg(target_pose->pose, target_pose_iso3d);
-
-		// publish a wireframe bounding box corresponding to the line shape constraint for visualization
-		// of the planar movement physical constraint
-		visual_tools->publishWireframeCuboid(target_pose_iso3d, line.dimensions[0], line.dimensions[1], line.dimensions[2],
-											rviz_visual_tools::CYAN);
-		visual_tools->trigger();
-
-		// apply bothbool planar_movement position and orientation constraints
-		moveit_msgs::msg::Constraints constrained_endeffector;
-		constrained_endeffector.orientation_constraints.push_back(constrained_orientation);
-		constrained_endeffector.position_constraints.push_back(constrained_position);
-		move_group->setPathConstraints(constrained_endeffector);
+		move_group->setPathConstraints(addLinearPathConstraints(target_pose));
 	}
 	*/
 
@@ -681,13 +637,87 @@ bool MoveIt2APIs::robotPlanAndMove(std::vector<double> joint_space_goal) {
 
 	return bool(response);
 }
+/**
+ * @brief add position and orientation constraints to the planning, so to produce a linear path
+ * @param target_pose the target pose of reference for the constraints
+ * @return the contraints to add to the path planning via move group interface
+ */
+moveit_msgs::msg::Constraints MoveIt2APIs::addLinearPathConstraints(geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
+	// set orientation constraint during movement to make fixed end effector orientation
+
+	// constraint on the orientation of the end effector
+	moveit_msgs::msg::OrientationConstraint constrained_orientation;
+	constrained_orientation.link_name = end_effector_link;
+	constrained_orientation.header.frame_id = fixed_base_frame;
+	// maintain same orientation as the target pose
+	constrained_orientation.orientation = target_pose->pose.orientation;
+	constrained_orientation.absolute_x_axis_tolerance = 1.0;
+	constrained_orientation.absolute_y_axis_tolerance = 1.0;
+	constrained_orientation.absolute_z_axis_tolerance = 1.0;
+	constrained_orientation.weight = 1.0;
+
+	// constraint on the position of the end effector --> planar movement along a line
+	moveit_msgs::msg::PositionConstraint constrained_position;
+	constrained_position.link_name = end_effector_link;
+	constrained_position.header.frame_id = fixed_base_frame;
+	constrained_position.target_point_offset.x = 0.1;
+	constrained_position.target_point_offset.y = 0.1;
+	constrained_position.target_point_offset.z = 0.1;
+	constrained_position.weight = 1.0;
+	// create line shape constraint (approximated as a box)
+	shape_msgs::msg::SolidPrimitive line;
+	line.type = shape_msgs::msg::SolidPrimitive::BOX;
+	line.dimensions = {0.3, 0.1, 0.1}; // dimensions in meters: x, y, z
+	constrained_position.constraint_region.primitives.emplace_back(line);
+
+	// define the pose of the line shape constraint
+	geometry_msgs::msg::Pose line_pose;
+	line_pose.position.x = target_pose->pose.position.x;
+	line_pose.position.y = target_pose->pose.position.y;
+	line_pose.position.z = target_pose->pose.position.z;
+	line_pose.orientation = target_pose->pose.orientation;
+	constrained_position.constraint_region.primitive_poses.emplace_back(line_pose);
+
+	// convert target pose into isometry 3d
+	Eigen::Isometry3d target_pose_iso3d;
+	tf2::fromMsg(target_pose->pose, target_pose_iso3d);
+
+	// publish a wireframe bounding box corresponding to the line shape constraint for visualization
+	// of the planar movement physical constraint
+	visual_tools->publishWireframeCuboid(target_pose_iso3d, line.dimensions[0], line.dimensions[1], line.dimensions[2],
+										 rviz_visual_tools::CYAN);
+	visual_tools->trigger();
+
+	// apply bothbool planar_movement position and orientation constraints
+	moveit_msgs::msg::Constraints constrained_endeffector;
+	constrained_endeffector.orientation_constraints.push_back(constrained_orientation);
+	constrained_endeffector.position_constraints.push_back(constrained_position);
+	return constrained_endeffector;
+}
+
+/**
+ * @brief use Inverse Kinematics solver library to check if a given pose has a valid IK solution
+ * @param pose the pose to check for a valid IK solution, in fixed base frame of reference
+ * @return bool whether the pose has a valid IK solution or not, given the set tolerances
+ */
+bool MoveIt2APIs::checkIKSolution(geometry_msgs::msg::PoseStamped pose) {
+	// bool valid = robot_state->setFromIK(joint_model_group, pose.pose, end_effector_link, 0.1);
+	kinematics::KinematicsBaseConstPtr kinematics_solver = joint_model_group->getSolverInstance();
+	std::vector<double> seed_joint_values = move_group->getCurrentJointValues();
+	std::vector<double> ik_solution = std::vector<double>();
+	// TODO: ik solution can be exploited to move the robot to the target pose using a joint space goal
+	moveit_msgs::msg::MoveItErrorCodes error_codes;
+	bool valid = kinematics_solver->getPositionIK(pose.pose, seed_joint_values, ik_solution, error_codes);
+	return valid;
+}
 
 /**
  * @brief adds a XYZ offset to the target pose coordinate in the fixed base frame
  * @param target_pose the target pose to add the offset to
  * @return the target pose with the offset applied
  */
-geometry_msgs::msg::PoseStamped::UniquePtr MoveIt2APIs::compensateTargetPose(geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
+geometry_msgs::msg::PoseStamped::UniquePtr MoveIt2APIs::compensateTargetPose(
+	geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
 	// create a new unique pointer for the transformed pose
 	geometry_msgs::msg::PoseStamped::UniquePtr offset_pose = std::make_unique<geometry_msgs::msg::PoseStamped>(*target_pose); // transformed pose
 
