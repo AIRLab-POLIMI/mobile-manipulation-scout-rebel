@@ -1,4 +1,7 @@
 
+#ifndef GRASP_POSE_ESTIMATOR_HPP
+#define GRASP_POSE_ESTIMATOR_HPP
+
 // ROS2 C++ includes
 #include <geometry_msgs/msg/point.hpp>
 #include <geometry_msgs/msg/pose.hpp>
@@ -16,12 +19,12 @@
 #include "mobile_manipulation_interfaces/msg/object_coords.hpp"
 
 // C++ includes
+#include <Eigen/Dense>
 #include <array>
+#include <cmath>
 #include <mutex>
 #include <thread>
 #include <vector>
-#include <cmath>
-#include <Eigen/Dense>
 
 // OpenCV includes
 #include <cv_bridge/cv_bridge.hpp>
@@ -29,6 +32,7 @@
 #include <opencv2/opencv.hpp>
 
 // MoveIt2 custom APIs
+#include "ball_perception.hpp"
 #include "moveit2_apis.hpp"
 
 class GraspPoseEstimator : public rclcpp::Node {
@@ -51,7 +55,7 @@ public:
 	/**
 	 * @brief Initialize the visual tools for rviz visualization
 	 * @param visual_tools shared pointer to MoveItVisualTools object
-	*/
+	 */
 	void setVisualTools(std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools);
 
 	/**
@@ -80,13 +84,21 @@ public:
 	void mainThread();
 
 	/**
+	 * @brief Acquire the depth data from the depth map at the given pixel coordinates
+	 * @param x x-coordinate of the pixel, address to store the acquired depth data
+	 * @param y y-coordinate of the pixel, address to store the acquired depth data
+	 * @return bool true if the depth data is acquired successfully, false if not valid or already acquired
+	 */
+	bool acquireDepthData(unsigned short &x, unsigned short &y);
+
+	/**
 	 * @brief move to static ready position: joint space goal where to look for a ball to be picked up
-	*/
+	 */
 	void moveToReadyPose();
 
 	/**
 	 * @brief drop the picked ball in the container put aside to the mobile robot
-	*/
+	 */
 	void dropBallToContainer();
 
 	/**
@@ -134,14 +146,14 @@ public:
 	 * @param ball_center estimated pose of center of the ball
 	 * @param theta angle of the grasping pose from the longitudinal axis from origin to the ball center
 	 * @return geometry_msgs::msg::PoseStamped grasping pose
-	*/
+	 */
 	geometry_msgs::msg::PoseStamped computeGraspingPose(geometry_msgs::msg::Point ball_center, float theta);
 
 	/**
 	 * @brief choose the most suitable grasping pose among the sampling poses
 	 * @param poses valid sampled grasping poses vector
 	 * @return geometry_msgs::msg::PoseStamped the most suitable grasping pose
-	*/
+	 */
 	geometry_msgs::msg::PoseStamped chooseGraspingPose(std::vector<geometry_msgs::msg::PoseStamped> poses);
 
 	/**
@@ -172,6 +184,9 @@ private:
 
 	// MoveIt2 APIs object
 	std::shared_ptr<MoveIt2APIs> moveit2_api_;
+
+	// BallPerception object
+	std::shared_ptr<BallPerception> ball_perception_;
 
 	// visual tools for rviz visualization
 	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools_;
@@ -207,8 +222,11 @@ private:
 	// mutex lock for depth map access
 	std::mutex depth_map_mutex;
 
-	const float ball_radius = 0.03; // ball radius in meters
+	const float ball_radius = 0.03;		  // ball radius in meters
 	const float grasping_distance = 0.04; // distance from the ball center to grasp pose
+	const float linear_motion = 0.05;	  // linear motion to approach the ball
 
-	const int n_grasp_sample_poses = 20; // number of sampling grasping poses
+	const int n_grasp_sample_poses = 40; // number of sampling grasping poses
 };
+
+#endif // GRASP_POSE_ESTIMATOR_HPP

@@ -42,8 +42,8 @@ void MoveIt2APIs::initPlanner() {
 
 	move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(moveit2_node_, PLANNING_GROUP);
 
-	moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-	// planning_scene_interface_ = &planning_scene_interface;
+	//moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+	planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
 
 	// We can print the name of the reference frame for this robot.
 	root_base_frame = move_group->getPlanningFrame();
@@ -104,6 +104,9 @@ void MoveIt2APIs::initPlanner() {
 
 	// Using the RobotModel we can construct a PlanningScene that maintains the state of the world (including the robot).
 	planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model);
+
+	// instantiate the inverse kinematics solver for the robot model
+	kinematics_solver = joint_model_group->getSolverInstance();
 
 	RCLCPP_INFO(LOGGER, "Planner and utilities initialized");
 
@@ -373,9 +376,9 @@ std::vector<geometry_msgs::msg::Pose> MoveIt2APIs::computeLinearWaypoints(geomet
 		waypoint = *this->apply_transform(starting_pose, x_step * (double)i, y_step * (double)i, z_step * (double)i, false);
 
 		// add offset compensation to the computed waypoint
-		geometry_msgs::msg::PoseStamped::SharedPtr waypoint_stamped = std::make_shared<geometry_msgs::msg::PoseStamped>();
-		waypoint_stamped->pose = waypoint;
-		waypoint_stamped->header.frame_id = fixed_base_frame;
+		geometry_msgs::msg::PoseStamped waypoint_stamped;
+		waypoint_stamped.pose = waypoint;
+		waypoint_stamped.header.frame_id = fixed_base_frame;
 		geometry_msgs::msg::PoseStamped::UniquePtr waypoint_compensated = compensateTargetPose(waypoint_stamped);
 
 		// add the compensated waypoint to the list of waypoints
@@ -428,9 +431,9 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
 	RCLCPP_INFO(LOGGER, "Planning and moving to target pose");
 
 	// apply offset compensation to the cartesian space target pose
-	geometry_msgs::msg::PoseStamped::UniquePtr compensated_target_pose = compensateTargetPose(target_pose);
+	geometry_msgs::msg::PoseStamped::UniquePtr compensated_target_pose = compensateTargetPose(*target_pose);
 
-	if (!checkIKSolution(*compensated_target_pose)) {
+	if (!checkIKSolution(compensated_target_pose->pose)) {
 		RCLCPP_ERROR(LOGGER, "No valid IK solution for the target pose");
 		return false;
 	}
@@ -700,14 +703,18 @@ moveit_msgs::msg::Constraints MoveIt2APIs::addLinearPathConstraints(geometry_msg
  * @param pose the pose to check for a valid IK solution, in fixed base frame of reference
  * @return bool whether the pose has a valid IK solution or not, given the set tolerances
  */
-bool MoveIt2APIs::checkIKSolution(geometry_msgs::msg::PoseStamped pose) {
+bool MoveIt2APIs::checkIKSolution(geometry_msgs::msg::Pose pose) {
 	// bool valid = robot_state->setFromIK(joint_model_group, pose.pose, end_effector_link, 0.1);
-	kinematics::KinematicsBaseConstPtr kinematics_solver = joint_model_group->getSolverInstance();
 	std::vector<double> seed_joint_values = move_group->getCurrentJointValues();
 	std::vector<double> ik_solution = std::vector<double>();
-	// TODO: ik solution can be exploited to move the robot to the target pose using a joint space goal
+	
 	moveit_msgs::msg::MoveItErrorCodes error_codes;
-	bool valid = kinematics_solver->getPositionIK(pose.pose, seed_joint_values, ik_solution, error_codes);
+	bool valid = false;
+	int attempts = 0;
+	while (!valid && attempts < 10) {
+		valid = kinematics_solver->searchPositionIK(pose, seed_joint_values, 0.01, ik_solution, error_codes);
+		attempts++;
+	}
 	return valid;
 }
 
@@ -717,14 +724,16 @@ bool MoveIt2APIs::checkIKSolution(geometry_msgs::msg::PoseStamped pose) {
  * @return the target pose with the offset applied
  */
 geometry_msgs::msg::PoseStamped::UniquePtr MoveIt2APIs::compensateTargetPose(
-	geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
+	geometry_msgs::msg::PoseStamped target_pose) {
 	// create a new unique pointer for the transformed pose
-	geometry_msgs::msg::PoseStamped::UniquePtr offset_pose = std::make_unique<geometry_msgs::msg::PoseStamped>(*target_pose); // transformed pose
+	geometry_msgs::msg::PoseStamped::UniquePtr offset_pose = std::make_unique<geometry_msgs::msg::PoseStamped>(target_pose); // transformed pose
+
+	float z_offset_variable = (1.0 - target_pose.pose.position.z) / 25.0;
 
 	// apply the delta translation to the pose
-	offset_pose->pose.position.x = target_pose->pose.position.x;
-	offset_pose->pose.position.y = target_pose->pose.position.y;
-	offset_pose->pose.position.z = target_pose->pose.position.z + z_offset;
+	offset_pose->pose.position.x = target_pose.pose.position.x;
+	offset_pose->pose.position.y = target_pose.pose.position.y;
+	offset_pose->pose.position.z = target_pose.pose.position.z + z_offset_variable;
 
 	return offset_pose;
 }
@@ -860,4 +869,12 @@ geometry_msgs::msg::TransformStamped::UniquePtr MoveIt2APIs::getTFfromBaseToCame
  */
 std::shared_ptr<moveit_visual_tools::MoveItVisualTools> MoveIt2APIs::getMoveItVisualTools(void) {
 	return this->visual_tools;
+}
+
+/**
+ * @brief getter for planning scene interface object pointer
+ * @return the planning scene interface object pointer
+ */
+std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> MoveIt2APIs::getPlanningSceneInterface(void) {
+	return this->planning_scene_interface_;
 }

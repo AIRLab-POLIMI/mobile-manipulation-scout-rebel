@@ -87,6 +87,7 @@ private:
 	std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;
 	moveit::core::RobotStatePtr robot_state;
 	moveit::core::RobotModelPtr robot_model;
+	kinematics::KinematicsBaseConstPtr kinematics_solver;
 
 	// rviz visual tools
 	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools;
@@ -220,17 +221,17 @@ public:
 
 	/**
 	 * @brief use Inverse Kinematics solver library to check if a given pose has a valid IK solution
-	 * @param pose the pose to check for a valid IK solution
+	 * @param pose the pose to check for a valid IK solution, in fixed base frame
 	 * @return bool whether the pose has a valid IK solution or not, given the set tolerances
 	*/
-	bool checkIKSolution(geometry_msgs::msg::PoseStamped pose);
+	bool checkIKSolution(geometry_msgs::msg::Pose pose);
 
 	/**
 	 * @brief adds a XYZ offset to the target pose coordinate in the fixed base frame
 	 * @param target_pose the target pose to add the offset to
 	 * @return the target pose with the offset applied
 	 */
-	geometry_msgs::msg::PoseStamped::UniquePtr compensateTargetPose(geometry_msgs::msg::PoseStamped::SharedPtr target_pose);
+	geometry_msgs::msg::PoseStamped::UniquePtr compensateTargetPose(geometry_msgs::msg::PoseStamped target_pose);
 
 	/**
 	 * @brief Create a workspace for the robot using a set of virtual walls acting as collision objects
@@ -271,6 +272,13 @@ public:
 	 * @return the moveit visual tools object pointer
 	 */
 	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> getMoveItVisualTools(void);
+
+	/**
+	 * @brief getter for planning scene interface object pointer
+	 * @return the planning scene interface object pointer
+	*/
+	std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> getPlanningSceneInterface(void);
+
 };
 
 #endif // MOVEIT2_APIS_HPP

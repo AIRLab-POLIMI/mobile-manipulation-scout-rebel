@@ -29,6 +29,9 @@ GraspPoseEstimator::GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api,
 
 	// save moveit2 apis object reference
 	this->moveit2_api_ = moveit2_api;
+
+	// initialize ball perception object
+	ball_perception_ = std::make_shared<BallPerception>(moveit2_api_);
 }
 
 /**
@@ -131,7 +134,7 @@ void GraspPoseEstimator::depth_map_callback(const sensor_msgs::msg::Image::Share
  * @brief move to static ready position: joint space goal where to look for a ball to be picked up
  */
 void GraspPoseEstimator::moveToReadyPose() {
-	const std::vector<double> ready_pose = {M_PI / 3.0, -M_PI / 3.0, 75.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
+	const std::vector<double> ready_pose = {M_PI / 3.0, -M_PI / 3.0, 90.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
 	moveit2_api_->robotPlanAndMove(ready_pose);
 }
 
@@ -153,45 +156,25 @@ void GraspPoseEstimator::mainThread() {
 	// set the rate for the main thread
 	rclcpp::Rate rate(15);
 
+	// move to static search pose to look for the ball
 	moveToReadyPose();
 
-	int x = 0, y = 0;
+	// initialize ball perception object
+	ball_perception_->setVisualTools(visual_tools_);
+	ball_perception_->setPlanningSceneInterface(moveit2_api_->getPlanningSceneInterface());
+
+	unsigned short x = 0, y = 0;
 
 	while (rclcpp::ok()) {
 		// check for updates in object coordinates
 		// estimate the grasp pose
 		// publish the grasp pose
+		bool acquired = acquireDepthData(x, y);
 
-		int x_temp = 0, y_temp = 0;
-		// save object center pixel coordinates
-		{ // acquire lock on object pixel coordinates
-			std::lock_guard<std::mutex> lock(object_coords_mutex);
-			if (object_x != 0 && object_y != 0) {
-				x_temp = object_x;
-				y_temp = object_y;
-			}
-		}
-
-		// if object coordinates are not received, wait for the next iteration
-		if (x_temp == 0 && y_temp == 0) {
+		if (!acquired) {
 			rate.sleep();
 			continue;
-		} else if (x_temp == x && y_temp == y) {
-			// if the object coordinates are the same as the previous iteration, wait for the next iteration
-			rate.sleep();
-			continue;
-		} else {
-			// update the object coordinates
-			x = x_temp;
-			y = y_temp;
 		}
-
-		// save depth map
-		{ // acquire lock on depth map
-			std::lock_guard<std::mutex> lock(depth_map_mutex);
-			depth_map->copyTo(*depth_map_saved);
-		}
-
 		// estimate grasp pose from the center pixel coordinate
 		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose =
 			std::make_shared<geometry_msgs::msg::PoseStamped>(estimateGraspingPose(x, y));
@@ -206,6 +189,7 @@ void GraspPoseEstimator::mainThread() {
 		// publish the grasp pose
 		grasp_pose_publisher->publish(*grasp_pose);
 
+		/* first version of the demo: reach directly the grasping pose
 		// first open with the gripper for picking up the ball
 		moveit2_api_->pump_release();
 
@@ -221,6 +205,43 @@ void GraspPoseEstimator::mainThread() {
 
 		// then grip the ball
 		moveit2_api_->pump_grip();
+		*/
+
+		// Second version of the demo: move to the pre-grasping pose, then to the grasping pose
+		// first compute the pre-grasp pose from the grasping pose
+		geometry_msgs::msg::Pose::UniquePtr pre_grasp_pose = moveit2_api_->apply_transform(
+			std::make_shared<geometry_msgs::msg::Pose>(grasp_pose->pose), -linear_motion, 0.0, 0.0, false);
+
+		geometry_msgs::msg::PoseStamped::SharedPtr pre_grasp_pose_stamped =
+			std::make_shared<geometry_msgs::msg::PoseStamped>();
+		pre_grasp_pose_stamped->header.frame_id = fixed_base_frame;
+		pre_grasp_pose_stamped->header.stamp = this->now();
+		pre_grasp_pose_stamped->pose = *pre_grasp_pose;
+
+		// then move to the pre-grasp pose
+		bool success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
+
+		// open the gripper for picking up the ball
+		moveit2_api_->pump_release();
+
+		// linear motion to the grasping pose
+		// geometry_msgs::msg::Pose::SharedPtr pre_grasp_pose_ptr = std::make_shared<geometry_msgs::msg::Pose>(*pre_grasp_pose);
+		// auto linear_path = moveit2_api_->computeLinearWaypoints(pre_grasp_pose_ptr, linear_motion, 0.0, 0.0);
+		// double percent_motion = moveit2_api_->robotPlanAndMove(linear_path);
+
+		// direct motion without cartesian path planning
+		success = moveit2_api_->robotPlanAndMove(grasp_pose);
+
+		// grip the ball
+		moveit2_api_->pump_grip();
+
+		// move to the pre-grasping pose with linear motion
+		// auto linear_path_back = moveit2_api_->computeLinearWaypoints(-linear_motion, 0.0, 0.0);
+		// percent_motion = moveit2_api_->robotPlanAndMove(linear_path_back);
+
+		// direct motion without cartesian path planning
+		success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
+
 		// move back to the ready pose
 		moveToReadyPose();
 		// drop the ball to the container: release then turn off the pump
@@ -230,6 +251,37 @@ void GraspPoseEstimator::mainThread() {
 
 		rate.sleep();
 	}
+}
+
+bool GraspPoseEstimator::acquireDepthData(unsigned short &x, unsigned short &y) {
+	int x_temp = 0, y_temp = 0;
+	// save object center pixel coordinates
+	{ // acquire lock on object pixel coordinates
+		std::lock_guard<std::mutex> lock(object_coords_mutex);
+		if (object_x != 0 && object_y != 0) {
+			x_temp = object_x;
+			y_temp = object_y;
+		}
+	}
+
+	// if object coordinates are not received, wait for the next iteration
+	if (x_temp == 0 && y_temp == 0) {
+		return false;
+	} else if (x_temp == x && y_temp == y) {
+		// if the object coordinates are the same as the previous iteration, wait for the next iteration
+		return false;
+	} else {
+		// update the object coordinates
+		x = x_temp;
+		y = y_temp;
+	}
+
+	// save depth map
+	{ // acquire lock on depth map
+		std::lock_guard<std::mutex> lock(depth_map_mutex);
+		depth_map->copyTo(*depth_map_saved);
+	}
+	return true;
 }
 
 /**
@@ -247,7 +299,6 @@ geometry_msgs::msg::PoseStamped GraspPoseEstimator::estimateGraspingPose(int x, 
 
 	// compute the center of the ball given the closest point to the camera
 	geometry_msgs::msg::Point ball_center = computeBallCenter(p_closest);
-	RCLCPP_INFO(logger_, "Estimated ball center: x=%f, y=%f, z=%f", ball_center.x, ball_center.y, ball_center.z);
 	visualizePoint(ball_center);
 
 	// compute the grasp pose from the center of the ball
@@ -347,23 +398,48 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 	// this will set the origin to the robot base frame
 	geometry_msgs::msg::Point ball_center_base;
 	tf2::doTransform(ball_center, ball_center_base, tf_camera_base);
+	RCLCPP_INFO(logger_, "Estimated ball center in fixed frame: x=%f, y=%f, z=%f", ball_center_base.x,
+				ball_center_base.y, ball_center_base.z);
 
-	float theta_min = -150.0 * M_PI / 180.0, theta_max = 45.0 * M_PI / 180.0;
+	// add collision object to the planning scene
+	// ball_perception_->addBallToScene(ball_center_base.x, ball_center_base.y, ball_center_base.z, ball_radius);
+
+	float theta_min = -180.0 * M_PI / 180.0, theta_max = 60.0 * M_PI / 180.0;
 	for (int i = 0; i < n_grasp_sample_poses; i++) {
 		// angle sampled from theta_min to theta_max
 		float theta = theta_min + i * (theta_max - theta_min) / (n_grasp_sample_poses - 1);
 		// compute the grasping pose at given theta angle
 		geometry_msgs::msg::PoseStamped grasp_pose = computeGraspingPose(ball_center_base, theta);
 
+		// apply compensation to the grasping pose
+		geometry_msgs::msg::PoseStamped::UniquePtr compensated_grasp_pose =
+			moveit2_api_->compensateTargetPose(grasp_pose);
+
 		// check if IK solution exists for the grasp pose
-		if (!moveit2_api_->checkIKSolution(grasp_pose)) {
-			RCLCPP_INFO(logger_, "No IK solution found for theta %f", theta);
+		if (!moveit2_api_->checkIKSolution(compensated_grasp_pose->pose)) {
+			RCLCPP_INFO(logger_, "No IK solution found for grasp at theta %f", theta);
 			continue;
 		} else {
-			RCLCPP_INFO(logger_, "IK solution found for theta %f", theta);
+			RCLCPP_INFO(logger_, "IK solution found for grasp at theta %f", theta);
 		}
 
-		// add the grasping pose to the list
+		// if the IK solution exists, compute the pre-grasp pose
+		geometry_msgs::msg::Pose::SharedPtr grasp_pose_ptr = std::make_shared<geometry_msgs::msg::Pose>(
+			compensated_grasp_pose->pose);
+
+		geometry_msgs::msg::Pose::UniquePtr pre_grasp_pose = moveit2_api_->apply_transform(grasp_pose_ptr,
+																						   -linear_motion, 0.0, 0.0, false);
+
+		// check if IK solution exists for the pre-grasp pose
+		if (!moveit2_api_->checkIKSolution(*pre_grasp_pose)) {
+			RCLCPP_INFO(logger_, "No IK solution found for pre-grasp pose at theta %f", theta);
+			continue;
+		} else {
+			RCLCPP_INFO(logger_, "IK solution found for pre-grasp pose at theta %f", theta);
+		}
+
+		// if both IK solutions exist, add the grasping pose to the list
+		// add the grasping pose to the list (before compensation)
 		grasping_poses.push_back(grasp_pose);
 	}
 

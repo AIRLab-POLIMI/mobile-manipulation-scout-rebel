@@ -39,6 +39,7 @@ include_directories(include ${OpenCV_INCLUDE_DIRS})
 # grasping pose estimator
 add_executable(grasp_pose_estimator
 	src/grasp_pose_estimator.cpp
+	src/ball_perception.cpp
 )
 ament_target_dependencies(grasp_pose_estimator
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools tf2_kdl moveit_ros_planning_interface
