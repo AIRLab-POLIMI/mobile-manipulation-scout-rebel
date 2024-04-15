@@ -6,10 +6,17 @@
  *      subscribes to /object_coords topic to receive object coordinates from object detection node
  *      publishes estimated grasp pose to /grasp_pose topic
  * @param moveit2_api shared pointer to MoveIt2APIs object
+ * @param ball_perception shared pointer to BallPerception object
  * @param node_options options for the node, given by the launch file
  */
-GraspPoseEstimator::GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api,
-									   const rclcpp::NodeOptions &options) : Node("grasp_pose_estimator", options) {
+GraspPoseEstimator::GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api_node,
+									   std::shared_ptr<BallPerception> ball_perception_node,
+									   const rclcpp::NodeOptions &options)
+	: Node("grasp_pose_estimator", options),
+	  moveit2_api_(moveit2_api_node),
+	  ball_perception_(ball_perception_node) {
+
+	// initialize parameters
 	initParams();
 
 	// subscribe to object coordinates topic
@@ -26,12 +33,6 @@ GraspPoseEstimator::GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api,
 
 	// publish grasp pose to topic
 	grasp_pose_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("/grasp_pose", 10);
-
-	// save moveit2 apis object reference
-	this->moveit2_api_ = moveit2_api;
-
-	// initialize ball perception object
-	ball_perception_ = std::make_shared<BallPerception>(moveit2_api_);
 }
 
 /**
@@ -158,10 +159,6 @@ void GraspPoseEstimator::mainThread() {
 
 	// move to static search pose to look for the ball
 	moveToReadyPose();
-
-	// initialize ball perception object
-	ball_perception_->setVisualTools(visual_tools_);
-	ball_perception_->setPlanningSceneInterface(moveit2_api_->getPlanningSceneInterface());
 
 	unsigned short x = 0, y = 0;
 
@@ -549,46 +546,4 @@ void GraspPoseEstimator::visualizePoses(std::vector<geometry_msgs::msg::PoseStam
 		visual_tools_->publishAxis(pose.pose, rviz_visual_tools::MEDIUM);
 	}
 	visual_tools_->trigger();
-}
-
-int main(int argc, char *argv[]) {
-	rclcpp::init(argc, argv);
-
-	// read parameters
-	rclcpp::NodeOptions node_options;
-	node_options.automatically_declare_parameters_from_overrides(true);
-
-	// Create an instance of the button presser node and moveit2 apis node
-	auto moveit2_apis_node = std::make_shared<MoveIt2APIs>(node_options);
-	auto grasp_pose_estimator_node = std::make_shared<GraspPoseEstimator>(moveit2_apis_node, node_options);
-
-	// asynchronous multi-threaded executor for spinning the nodes in separate threads
-	rclcpp::executors::MultiThreadedExecutor executor;
-	auto main_thread = std::make_unique<std::thread>([&executor, &grasp_pose_estimator_node, &moveit2_apis_node]() {
-		executor.add_node(grasp_pose_estimator_node->get_node_base_interface());
-		executor.add_node(moveit2_apis_node->get_node_base_interface());
-		executor.spin();
-	});
-
-	// initialize planner, move group, planning scene and get general info
-	moveit2_apis_node->initPlanner();
-
-	// initialize visual tools for drawing on rviz
-	moveit2_apis_node->initRvizVisualTools();
-
-	// set the visual tools pointer for the grasp pose estimator node
-	grasp_pose_estimator_node->setVisualTools(moveit2_apis_node->getMoveItVisualTools());
-
-	// initialize the soft gripper pneumatic pump service
-	moveit2_apis_node->waitForPumpService();
-
-	// start the main thread for the grasp pose estimator node to estimate the grasp pose from object coordinates
-	std::thread grasp_pose_estimator_thread = std::thread(&GraspPoseEstimator::mainThread, grasp_pose_estimator_node);
-	grasp_pose_estimator_thread.detach();
-
-	main_thread->join();
-	grasp_pose_estimator_thread.join();
-
-	rclcpp::shutdown();
-	return 0;
 }

@@ -43,9 +43,11 @@ public:
 	 *      subscribes to /object_coords topic to receive object coordinates from object detection node
 	 *      publishes estimated grasp pose to /grasp_pose topic
 	 * @param moveit2_api shared pointer to MoveIt2APIs object
+	 * @param ball_perception shared pointer to BallPerception object
 	 * @param node_options options for the node, given by the launch file
 	 */
-	GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api, const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
+	GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api_node, std::shared_ptr<BallPerception> ball_perception_node,
+					   const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 	/**
 	 * @brief Initialize parameters read from the yaml config file
