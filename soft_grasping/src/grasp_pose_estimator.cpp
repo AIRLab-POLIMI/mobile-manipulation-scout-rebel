@@ -14,7 +14,8 @@ GraspPoseEstimator::GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api_
 									   const rclcpp::NodeOptions &options)
 	: Node("grasp_pose_estimator", options),
 	  moveit2_api_(moveit2_api_node),
-	  ball_perception_(ball_perception_node) {
+	  ball_perception_(ball_perception_node),
+	  fixed_base_frame(moveit2_api_->fixed_base_frame) {
 
 	// initialize parameters
 	initParams();
@@ -44,13 +45,10 @@ void GraspPoseEstimator::initParams() {
 	depth_topic = get_parameter("depth_topic").as_string();
 	camera_info_topic = get_parameter("camera_info_topic").as_string();
 	camera_rgb_frame = get_parameter("camera_rgb_frame").as_string();
-	camera_depth_frame = get_parameter("camera_depth_frame").as_string();
 
 	// log parameters
-
 	RCLCPP_INFO(logger_, "camera_info_topic: %s", camera_info_topic.c_str());
 	RCLCPP_INFO(logger_, "camera_rgb_frame: %s", camera_rgb_frame.c_str());
-	RCLCPP_INFO(logger_, "camera_depth_frame: %s", camera_depth_frame.c_str());
 	RCLCPP_INFO(logger_, "depth_topic: %s", depth_topic.c_str());
 }
 
@@ -186,7 +184,7 @@ void GraspPoseEstimator::mainThread() {
 		// publish the grasp pose
 		grasp_pose_publisher->publish(*grasp_pose);
 
-		/* first version of the demo: reach directly the grasping pose
+		/* first version of the demo: reach directly the grasping pose and grip the ball
 		// first open with the gripper for picking up the ball
 		moveit2_api_->pump_release();
 
@@ -217,27 +215,49 @@ void GraspPoseEstimator::mainThread() {
 
 		// then move to the pre-grasp pose
 		bool success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
+		if (!success) {
+			RCLCPP_ERROR(logger_, "Failed to move to the pre-grasping pose");
+			continue;
+		}
 
 		// open the gripper for picking up the ball
 		moveit2_api_->pump_release();
 
 		// linear motion to the grasping pose
-		// geometry_msgs::msg::Pose::SharedPtr pre_grasp_pose_ptr = std::make_shared<geometry_msgs::msg::Pose>(*pre_grasp_pose);
-		// auto linear_path = moveit2_api_->computeLinearWaypoints(pre_grasp_pose_ptr, linear_motion, 0.0, 0.0);
-		// double percent_motion = moveit2_api_->robotPlanAndMove(linear_path);
+		geometry_msgs::msg::Pose::SharedPtr pre_grasp_pose_ptr = std::make_shared<geometry_msgs::msg::Pose>(*pre_grasp_pose);
+		auto linear_path = moveit2_api_->computeLinearWaypoints(pre_grasp_pose_ptr, linear_motion, 0.0, 0.0);
+		double percent_motion = moveit2_api_->robotPlanAndMove(linear_path);
+		if (percent_motion < 1.0) {
+			RCLCPP_ERROR(logger_, "Failed to move to the grasping pose with cartesian path planning");
 
-		// direct motion without cartesian path planning
-		success = moveit2_api_->robotPlanAndMove(grasp_pose);
+			// attempt instead the direct motion without cartesian path planning
+			success = moveit2_api_->robotPlanAndMove(grasp_pose);
+
+			if (!success) {
+				RCLCPP_ERROR(logger_, "Failed to move to the grasping pose directly");
+				moveit2_api_->pump_off();
+				moveToReadyPose();
+				// skip the rest of the loop
+				rate.sleep();
+				continue;
+			}
+		}
 
 		// grip the ball
 		moveit2_api_->pump_grip();
 
 		// move to the pre-grasping pose with linear motion
-		// auto linear_path_back = moveit2_api_->computeLinearWaypoints(-linear_motion, 0.0, 0.0);
-		// percent_motion = moveit2_api_->robotPlanAndMove(linear_path_back);
+		auto linear_path_back = moveit2_api_->computeLinearWaypoints(-linear_motion, 0.0, 0.0);
+		percent_motion = moveit2_api_->robotPlanAndMove(linear_path_back);
+		if (percent_motion < 1.0) {
+			RCLCPP_ERROR(logger_, "Failed to move back from the grasping pose with cartesian path planning");
 
-		// direct motion without cartesian path planning
-		success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
+			// attempt instead direct motion without cartesian path planning
+			success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
+			if (!success) {
+				RCLCPP_ERROR(logger_, "Failed to move back from the grasping pose directly");
+			}
+		}
 
 		// move back to the ready pose
 		moveToReadyPose();
@@ -250,6 +270,12 @@ void GraspPoseEstimator::mainThread() {
 	}
 }
 
+/**
+ * @brief Acquire the depth data from the depth map at the given pixel coordinates
+ * @param x x-coordinate of the pixel, address to store the acquired depth data
+ * @param y y-coordinate of the pixel, address to store the acquired depth data
+ * @return bool true if the depth data is acquired successfully, false if not valid or already acquired
+ */
 bool GraspPoseEstimator::acquireDepthData(unsigned short &x, unsigned short &y) {
 	int x_temp = 0, y_temp = 0;
 	// save object center pixel coordinates
@@ -389,7 +415,7 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 	std::vector<geometry_msgs::msg::PoseStamped> grasping_poses;
 
 	// transform the grasp pose from the camera frame to the robot base frame
-	geometry_msgs::msg::TransformStamped tf_camera_base = *moveit2_api_->getTFfromBaseToCamera();
+	geometry_msgs::msg::TransformStamped tf_camera_base = *moveit2_api_->getTFfromBaseToCamera(camera_rgb_frame);
 
 	// transform the ball center position from the camera frame to the robot base frame
 	// this will set the origin to the robot base frame
@@ -398,8 +424,12 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 	RCLCPP_INFO(logger_, "Estimated ball center in fixed frame: x=%f, y=%f, z=%f", ball_center_base.x,
 				ball_center_base.y, ball_center_base.z);
 
+	//NOTE: the following code is commented because Octomap is not used in this version of the code
 	// add collision object to the planning scene
 	// ball_perception_->addBallToScene(ball_center_base.x, ball_center_base.y, ball_center_base.z, ball_radius);
+	// remove the points inside the sphere from the pointcloud
+	//Eigen::Vector3f center_v(ball_center_base.x, ball_center_base.y, ball_center_base.z);
+	//ball_perception_->setFilterRemoveSphere(center_v, ball_radius * 2.0);
 
 	float theta_min = -180.0 * M_PI / 180.0, theta_max = 60.0 * M_PI / 180.0;
 	for (int i = 0; i < n_grasp_sample_poses; i++) {
@@ -526,7 +556,7 @@ geometry_msgs::msg::PoseStamped GraspPoseEstimator::chooseGraspingPose(std::vect
  */
 void GraspPoseEstimator::visualizePoint(geometry_msgs::msg::Point point, rviz_visual_tools::Colors color) {
 	// visualize the point in rviz
-	visual_tools_->setBaseFrame(camera_depth_frame);
+	visual_tools_->setBaseFrame(camera_rgb_frame);
 	if (color == rviz_visual_tools::BLUE) {
 		visual_tools_->publishSphere(point, color, rviz_visual_tools::XLARGE);
 	} else {

@@ -8,6 +8,8 @@
 
 // ROS2 imports
 #include <rclcpp/rclcpp.hpp>
+
+// TF2 imports
 #include <tf2/exceptions.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -192,15 +194,15 @@ public:
 	std::vector<geometry_msgs::msg::Pose> computeLinearWaypoints(double x_length, double y_length, double z_length);
 
 	/**
-	 * @param target_pose the target pose for the robotic arm to reach
 	 * @brief Plan and move the robotic arm to the target pose
+	 * @param target_pose the target pose for the robotic arm to reach
 	 * @return true if the movement and planning was successful, false otherwise
 	 */
 	bool robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr target_pose);
 
 	/**
-	 * @param pose_waypoints the sequence of waypoints to follow for the end effector
 	 * @brief Plan and move the robot to the sequence of poses, in cartesian space
+	 * @param pose_waypoints the sequence of waypoints to follow for the end effector
 	 * @return percentage of completion of the linear sequence of waypoints
 	 */
 	double robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_waypoints);
@@ -263,9 +265,17 @@ public:
 
 	/**
 	 * @brief compute TF from the base frame of the robot to the camera frame
+	 * 	uses the camera rgb frame topic as the default value
 	 * @return the transform stamped from the base frame of the robot to the camera frame
 	 */
 	geometry_msgs::msg::TransformStamped::UniquePtr getTFfromBaseToCamera(void);
+
+	/**
+	 * @brief compute TF from the base frame of the robot to the camera frame
+	 * @param camera_frame the camera frame name, default is parameter for camera rgb frame topic
+	 * @return the transform stamped from the base frame of the robot to the camera frame
+	 */
+	geometry_msgs::msg::TransformStamped::UniquePtr getTFfromBaseToCamera(std::string camera_frame);
 
 	/**
 	 * @brief getter for moveit visual tools object pointer

@@ -3,6 +3,7 @@
         # Input topics
         rgb_topic: /camera/color/image_raw # Input rgb image topic
         depth_topic: /camera/aligned_depth_to_color/image_raw # Input depth image topic
+        pointcloud_topic: /camera/depth/color/points # Input pointcloud topic
         camera_info_topic: /camera/aligned_depth_to_color/camera_info # Input camera info topic with camera intrinsic parameters
         # Frames of reference
         camera_rgb_frame: camera_color_optical_frame # Camera frame of reference for rgb images

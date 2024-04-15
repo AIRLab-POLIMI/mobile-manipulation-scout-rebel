@@ -5,9 +5,10 @@
  * @brief constructor for the moveit2 apis class
  * @param node_options the node options to use for the moveit2 apis node
  */
-MoveIt2APIs::MoveIt2APIs(const rclcpp::NodeOptions &node_options) : Node("moveit2_apis_node", node_options),
-																	// loads the camera frame from the aruco detector config file
-																	camera_frame_name(get_parameter("camera_frame").as_string()) {
+MoveIt2APIs::MoveIt2APIs(const rclcpp::NodeOptions &node_options)
+	: Node("moveit2_apis_node", node_options),
+	  // loads the camera frame from the aruco detector config file
+	  camera_frame_name(get_parameter("camera_frame").as_string()) {
 
 	if (this->camera_frame_name != std::string()) {
 		RCLCPP_INFO(LOGGER, "Value of camera frame: %s", this->camera_frame_name.c_str());
@@ -42,7 +43,7 @@ void MoveIt2APIs::initPlanner() {
 
 	move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(moveit2_node_, PLANNING_GROUP);
 
-	//moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+	// moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
 	planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
 
 	// We can print the name of the reference frame for this robot.
@@ -423,9 +424,9 @@ std::vector<geometry_msgs::msg::Pose> MoveIt2APIs::computeLinearWaypoints(double
 }
 
 /**
+ * @brief Plan and move the robot to the target pose
  * @param target_pose the cartesian pose target with reference frame associated
  * @return result of the movement
- * @brief Plan and move the robot to the target pose
  */
 bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
 	RCLCPP_INFO(LOGGER, "Planning and moving to target pose");
@@ -496,8 +497,8 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
 }
 
 /**
- * @param pose_waypoints the sequence of waypoints to follow for the end effector
  * @brief Plan and move the robot to the sequence of poses, in cartesian space
+ * @param pose_waypoints the sequence of waypoints to follow for the end effector
  * @return percentage of completion of the linear sequence of waypoints
  */
 double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_waypoints) {
@@ -707,7 +708,7 @@ bool MoveIt2APIs::checkIKSolution(geometry_msgs::msg::Pose pose) {
 	// bool valid = robot_state->setFromIK(joint_model_group, pose.pose, end_effector_link, 0.1);
 	std::vector<double> seed_joint_values = move_group->getCurrentJointValues();
 	std::vector<double> ik_solution = std::vector<double>();
-	
+
 	moveit_msgs::msg::MoveItErrorCodes error_codes;
 	bool valid = false;
 	int attempts = 0;
@@ -849,13 +850,23 @@ bool MoveIt2APIs::getLoadBaseArg(void) {
 
 /**
  * @brief compute TF from the base frame of the robot to the camera frame
+ * 	uses the camera rgb frame topic as the default value
  * @return the transform stamped from the base frame of the robot to the camera frame
  */
-geometry_msgs::msg::TransformStamped::UniquePtr MoveIt2APIs::getTFfromBaseToCamera() {
+geometry_msgs::msg::TransformStamped::UniquePtr MoveIt2APIs::getTFfromBaseToCamera(void) {
+	return this->getTFfromBaseToCamera(camera_frame_name);
+}
+
+/**
+ * @brief compute TF from the base frame of the robot to the camera frame
+ * @param camera_frame the camera frame name, default is parameter for camera rgb frame topic
+ * @return the transform stamped from the base frame of the robot to the camera frame
+ */
+geometry_msgs::msg::TransformStamped::UniquePtr MoveIt2APIs::getTFfromBaseToCamera(std::string camera_frame) {
 	// transform the poses of the aruco markers with respect to the fixed base frame of reference
 	geometry_msgs::msg::TransformStamped tf_camera_base_msg;
 	try {
-		tf_camera_base_msg = tf_buffer_->lookupTransform(fixed_base_frame, camera_frame_name, tf2::TimePointZero);
+		tf_camera_base_msg = tf_buffer_->lookupTransform(fixed_base_frame, camera_frame, tf2::TimePointZero);
 	} catch (const tf2::TransformException &ex) {
 		RCLCPP_ERROR(LOGGER, "%s", ex.what());
 		return nullptr;

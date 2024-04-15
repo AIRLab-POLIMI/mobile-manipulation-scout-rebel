@@ -32,7 +32,7 @@ def generate_launch_description():
 
     config = config["/**"]["ros__parameters"]
 
-    image_topic_arg = DeclareLaunchArgument(
+    rgb_topic_arg = DeclareLaunchArgument(
         name='rgb_topic',
         default_value=config['rgb_topic'],
         description='Name of the image RGB topic provided by the camera node',
@@ -42,6 +42,12 @@ def generate_launch_description():
         name='depth_topic',
         default_value=config['depth_topic'],
         description='Name of the depth image topic provided by the camera node',
+    )
+
+    pointcloud_topic_arg = DeclareLaunchArgument(
+        name='pointcloud_topic',
+        default_value=config['pointcloud_topic'],
+        description='Name of the pointcloud topic provided by the camera node',
     )
 
     camera_info_topic_arg = DeclareLaunchArgument(
@@ -94,10 +100,6 @@ def generate_launch_description():
         executable='target_click.py',
         parameters=[{
             'rgb_topic': LaunchConfiguration('rgb_topic'),
-            'depth_topic': LaunchConfiguration('depth_topic'),
-            'camera_info_topic': LaunchConfiguration('camera_info_topic'),
-            'camera_rgb_frame': LaunchConfiguration('camera_rgb_frame'),
-            'camera_depth_frame': LaunchConfiguration('camera_depth_frame'),
         }],
         output='screen',
         emulate_tty=True
@@ -120,10 +122,10 @@ def generate_launch_description():
         executable='grasp_pose_estimator',
         parameters=moveit_loader.load_moveit(with_sensors3d=False) + [{
             # parameters for moveit2_apis library
-            "camera_frame": LaunchConfiguration("camera_frame"),
+            "camera_frame": LaunchConfiguration('camera_rgb_frame'),
             "load_base": LaunchConfiguration("load_base"),
             # parameters for the grasping pose estimator node
-            'rgb_topic': LaunchConfiguration('rgb_topic'),
+            'pointcloud_topic': LaunchConfiguration('pointcloud_topic'),
             'depth_topic': LaunchConfiguration('depth_topic'),
             'camera_info_topic': LaunchConfiguration('camera_info_topic'),
             'camera_rgb_frame': LaunchConfiguration('camera_rgb_frame'),
@@ -158,7 +160,8 @@ def generate_launch_description():
 
     return LaunchDescription(args + [
         # Arguments
-        image_topic_arg,
+        rgb_topic_arg,
+        pointcloud_topic_arg,
         depth_image_topic_arg,
         camera_info_topic_arg,
         camera_rgb_frame_arg,

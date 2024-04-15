@@ -5,21 +5,20 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 // pointcloud library
+#include <pcl/common/transforms.h>
 #include <pcl/filters/conditional_removal.h>
+#include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <pcl/kdtree/kdtree_flann.h>
-#include <pcl/filters/extract_indices.h>
-#include <pcl/common/transforms.h>
 
 // MoveIt2 custom APIs
 #include "moveit2_apis.hpp"
 
 class BallPerception : public rclcpp::Node {
 public:
-
 	/**
 	 * @brief struct to define the color mask for filtering pointcloud by color
 	 * the color mask defines the minimum and maximum color values for red, green and blue channels
@@ -66,6 +65,12 @@ public:
 	void setFilterRemoveSphere(Eigen::Vector3f center, float radius);
 
 	/**
+	 * @brief reset the flag for filtering the sphere to false
+	 * this means that the pointcloud data will not be filtered
+	 */
+	void resetFilterRemoveSphere();
+
+	/**
 	 * @brief given a pointcloud, it filters data outside the specified range distance and returns the filtered pointcloud
 	 * @param input_cloud the input pointcloud
 	 * @param max_distance the maximum distance of data points to be kept
@@ -106,7 +111,7 @@ public:
 	void addBallToScene(float x, float y, float z, float radius);
 
 private:
-const rclcpp::Logger logger_ = rclcpp::get_logger("BallPerception");
+	const rclcpp::Logger logger_ = rclcpp::get_logger("BallPerception");
 
 	// moveit2 api object pointer
 	std::shared_ptr<MoveIt2APIs> moveit2_api_;
@@ -121,11 +126,12 @@ const rclcpp::Logger logger_ = rclcpp::get_logger("BallPerception");
 	// publisher to the filtered pointcloud topic
 	rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_filtered_pub_;
 
-	// pointcloud topic to subscribe to
-	const std::string pointcloud_topic = "/camera/aligned_depth_to_color/points";
+	// fixed base frame of reference
+	const std::string fixed_base_frame;
 
-	// filtered pointcloud topic to publish
-	const std::string pointcloud_topic_filtered = "/camera/aligned_depth_to_color/points/filtered";
+	const std::string pointcloud_topic;			 // pointcloud topic to subscribe to
+	const std::string pointcloud_topic_filtered; // filtered pointcloud topic to publish
+	const std::string pointcloud_frame;			 // pointcloud frame of reference
 
 	// flags to filter the pointcloud data by the sphere
 	bool filter_remove_sphere_ = false;

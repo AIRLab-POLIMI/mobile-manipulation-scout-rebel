@@ -7,7 +7,14 @@
  */
 BallPerception::BallPerception(std::shared_ptr<MoveIt2APIs> moveit2_api, const rclcpp::NodeOptions &options)
 	: rclcpp::Node("ball_perception", options),
-	  moveit2_api_(moveit2_api) {
+	  // initialize the MoveIt2APIs object pointer
+	  moveit2_api_(moveit2_api),
+	  fixed_base_frame(moveit2_api_->fixed_base_frame),
+	  // read pointcloud topic from the parameter server
+	  pointcloud_topic(this->get_parameter("pointcloud_topic").as_string()),
+	  pointcloud_topic_filtered(pointcloud_topic + "/filtered"),
+	  // read pointcloud frame name from the parameter server
+	  pointcloud_frame(this->get_parameter("camera_depth_frame").as_string()) {
 
 	// initialize the pointcloud subscriber
 	pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -47,17 +54,20 @@ void BallPerception::pointcloudCallback(const sensor_msgs::msg::PointCloud2::Sha
 
 	// Now you can use PCL functions on pcl_cloud
 	// filter the pointcloud by distance
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered = filterPointCloudByDistance(pcl_cloud, 2.0);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered = filterPointCloudByDistance(pcl_cloud, 1.5);
 
+	std::string frame_id = msg->header.frame_id;
 	// filter the pointcloud by the sphere only when requested
 	if (filter_remove_sphere_) {
 		cloud_filtered = filterPointCloudBySphere(cloud_filtered, center_sphere, radius_sphere);
+		frame_id = fixed_base_frame;
 	}
 
 	// convert the filtered pointcloud back to ROS message
 	sensor_msgs::msg::PointCloud2 cloud_filtered_msg;
 	pcl::toROSMsg(*cloud_filtered, cloud_filtered_msg);
-	cloud_filtered_msg.header = msg->header;
+	cloud_filtered_msg.header.frame_id = frame_id;
+	cloud_filtered_msg.header.stamp = this->now();
 
 	// publish the filtered pointcloud
 	pointcloud_filtered_pub_->publish(cloud_filtered_msg);
@@ -72,9 +82,18 @@ void BallPerception::pointcloudCallback(const sensor_msgs::msg::PointCloud2::Sha
  * @param radius the radius of the sphere
  */
 void BallPerception::setFilterRemoveSphere(Eigen::Vector3f center, float radius) {
+	RCLCPP_INFO(logger_, "Filtering pointcloud by sphere");
 	filter_remove_sphere_ = true;
 	center_sphere = center;
 	radius_sphere = radius;
+}
+
+/**
+ * @brief reset the flag for filtering the sphere to false
+ * this means that the pointcloud data will not be filtered
+ */
+void BallPerception::resetFilterRemoveSphere() {
+	filter_remove_sphere_ = false;
 }
 
 /**
@@ -150,20 +169,19 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr BallPerception::filterPointCloudByColor(p
  * @param radius the radius of the sphere
  * @return the filtered pointcloud with the points that are outside the sphere
  */
-pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudBySphere(pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud, Eigen::Vector3f center, float radius) {
+pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudBySphere(pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud,
+																			 Eigen::Vector3f center, float radius) {
 
 	// transform the input pointcloud from its frame to the fixed frame of reference
-	std::string fixed_frame = moveit2_api_->fixed_base_frame;
 
 	// 1. get transform stamped from moveit2 apis
-	geometry_msgs::msg::TransformStamped::UniquePtr tf2_msg = moveit2_api_->getTFfromBaseToCamera();
+	geometry_msgs::msg::TransformStamped::UniquePtr tf2_msg = moveit2_api_->getTFfromBaseToCamera(pointcloud_frame);
 
 	// 2. Convert TransformStamped to Eigen::Affine3d
-	Eigen::Affine3d transform;
-	tf2::fromMsg(tf2_msg->transform, transform);
+	Eigen::Affine3d transform = tf2::transformToEigen(*tf2_msg);
 
 	// 3. Transform the pointcloud
-	pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::transformPointCloud(*input_cloud, *transformed_cloud, transform);
 
 	// Create KD-Tree for efficient nearest neighbor search
@@ -174,8 +192,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudBySphere(pcl
 	std::vector<int> indices_to_keep;
 
 	// Find points outside the sphere
-	for (unsigned int i = 0; i < input_cloud->size(); ++i) {
-		const auto &point = input_cloud->points[i];
+	for (unsigned int i = 0; i < transformed_cloud->size(); ++i) {
+		const auto &point = transformed_cloud->points[i];
 		float squared_dist = (point.getVector3fMap() - center).squaredNorm();
 		if (squared_dist > radius * radius) { // Point is outside the sphere
 			indices_to_keep.push_back(i);	  // Add the index to the list to keep the point
@@ -184,7 +202,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudBySphere(pcl
 
 	// Extract the points to keep using the indices
 	pcl::ExtractIndices<pcl::PointXYZ> extract;
-	extract.setInputCloud(input_cloud);
+	extract.setInputCloud(transformed_cloud);
 	extract.setIndices(std::make_shared<std::vector<int>>(indices_to_keep));
 	extract.setNegative(false); // We want the indices we specified
 

@@ -9,6 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
+// ROS2 sensor msgs
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
@@ -194,13 +195,12 @@ private:
 	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools_;
 
 	// the frame in which the grasp pose coordinates are expressed
-	const std::string fixed_base_frame = "igus_rebel_base_link";
+	const std::string fixed_base_frame;
 
 	// camera topics and frames read from the config yaml file
 	std::string depth_topic;
 	std::string camera_info_topic;
 	std::string camera_rgb_frame;
-	std::string camera_depth_frame;
 
 	// current object pixel coordinates
 	unsigned short object_x = 0;
