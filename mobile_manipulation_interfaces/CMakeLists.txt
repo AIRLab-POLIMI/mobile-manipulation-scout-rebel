@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 	"action/ButtonPress.action"
 	"action/ButtonFind.action"
 	"msg/ObjectCoords.msg"
+	"msg/ObjectDetections.msg"
 	DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
 )
 

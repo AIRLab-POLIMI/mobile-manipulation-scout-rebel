@@ -22,7 +22,6 @@ find_package(tf2_geometry_msgs REQUIRED)
 
 # ----------------------- C++ -----------------------
 
-
 if(BUILD_TESTING)
 	find_package(ament_lint_auto REQUIRED)
 	ament_lint_auto_find_test_dependencies()
@@ -34,13 +33,14 @@ endif()
 ament_python_install_package(${PROJECT_NAME})
 
 install(DIRECTORY
-	launch
+	launch models
 	DESTINATION share/${PROJECT_NAME}
 )
 
 # Install Python executables
 install(PROGRAMS
 	scripts/dataset_collector.py
+	scripts/ball_detector.py
 	DESTINATION lib/${PROJECT_NAME}
 )
 
