@@ -36,7 +36,13 @@ BallPerception::BallPerception(std::shared_ptr<MoveIt2APIs> moveit2_api, const r
 	//	pointcloud_topic, 10, std::bind(&BallPerception::pointcloud_callback, this, std::placeholders::_1));
 
 	// initialize the pointcloud publisher
-	pointcloud_filtered_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic_filtered, 10);
+	//pointcloud_filtered_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic_filtered, 10);
+
+	// initialize the saved images matrices
+	rgb_image = std::make_shared<cv::Mat>();
+	rgb_image_saved = std::make_shared<cv::Mat>();
+	depth_map = std::make_shared<cv::Mat>();
+	depth_map_saved = std::make_shared<cv::Mat>();
 }
 
 /**
@@ -45,11 +51,13 @@ BallPerception::BallPerception(std::shared_ptr<MoveIt2APIs> moveit2_api, const r
 void BallPerception::initParams() {
 
 	// get parameters
+	rgb_image_topic = get_parameter("rgb_topic").as_string();
 	depth_topic = get_parameter("depth_topic").as_string();
 	camera_info_topic = get_parameter("camera_info_topic").as_string();
 	camera_rgb_frame = get_parameter("camera_rgb_frame").as_string();
 
 	// log parameters
+	RCLCPP_INFO(logger_, "rgb_image_topic: %s", rgb_image_topic.c_str());
 	RCLCPP_INFO(logger_, "camera_info_topic: %s", camera_info_topic.c_str());
 	RCLCPP_INFO(logger_, "camera_rgb_frame: %s", camera_rgb_frame.c_str());
 	RCLCPP_INFO(logger_, "depth_topic: %s", depth_topic.c_str());
@@ -142,7 +150,7 @@ void BallPerception::pointcloud_callback(const sensor_msgs::msg::PointCloud2::Sh
 
 	// Now you can use PCL functions on pcl_cloud
 	// filter the pointcloud by distance
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered = filterPointCloudByDistance(pcl_cloud, 1.5);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered = filterPointCloudByDistance(pcl_cloud);
 
 	std::string frame_id = msg->header.frame_id;
 	// filter the pointcloud by the sphere only when requested
@@ -179,7 +187,7 @@ void BallPerception::saveRGBDepth() {
 	// save rgb image
 	{
 		std::lock_guard<std::mutex> lock(rgb_image_mutex);
-		rgb_image_saved->copyTo(*rgb_image);
+		rgb_image->copyTo(*rgb_image_saved);
 	}
 
 	// save depth map
@@ -224,7 +232,7 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr BallPerception::computePointCloud(int x, 
 	for (int i = 0; i < width; i++) {
 		for (int j = 0; j < height; j++) {
 			// compute the 3D point in the camera frame, from the pixel coordinates x+i, y+j
-			float depth = (float)depth_map_saved->at<uint16_t>(y, x) * depth_scale;
+			float depth = (float)depth_map_saved->at<uint16_t>(y+j, x+i) * depth_scale;
 
 			// fill the pointcloud with the 3D point and color information
 			pcl::PointXYZRGB point;
@@ -248,18 +256,30 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr BallPerception::computePointCloud(int x, 
  */
 pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::generateSegmentedPointCloud(BallPerception::ObjectDetection detected,
 																				float max_distance) {
+
 	// create pointcloud data from the bounding box coordinates and the depth map
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr detected_points = computePointCloud(detected.x_min, detected.y_min,
 																			   detected.width, detected.height);
 
+	RCLCPP_INFO(logger_, "Detected points size: %ld", detected_points->size());
+
 	// filter the points by distance
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr detected_points_filtered = filterPointCloudByDistance(detected_points, max_distance);
+
+	int detected_points_filtered_size = detected_points_filtered->size();
+	RCLCPP_INFO(logger_, "Filtered points size: %ld", detected_points_filtered_size);
+	if (detected_points_filtered_size == 0) {
+		RCLCPP_INFO(logger_, "Not enough points in the pointcloud");
+		return nullptr;
+	}
 
 	// segment the pointcloud data by applying a color mask filter defined by the class label
 	color_mask color_mask = getColorMask(detected.label);
 
 	// filter the pointcloud data by color
 	pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_points = filterPointCloudByColor(detected_points_filtered, color_mask);
+
+	RCLCPP_INFO(logger_, "Segmented points size: %ld", segmented_points->size());
 
 	return segmented_points;
 }
@@ -354,17 +374,17 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudByColor(pcl:
 	// Create the condition
 	pcl::ConditionAnd<pcl::PointXYZHSV>::Ptr color_condition(new pcl::ConditionAnd<pcl::PointXYZHSV>());
 	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("r", pcl::ComparisonOps::GT, color_mask.min_hue)));
+		new pcl::FieldComparison<pcl::PointXYZHSV>("h", pcl::ComparisonOps::GT, color_mask.min_hue)));
 	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("r", pcl::ComparisonOps::LT, color_mask.max_hue)));
+		new pcl::FieldComparison<pcl::PointXYZHSV>("h", pcl::ComparisonOps::LT, color_mask.max_hue)));
 	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("g", pcl::ComparisonOps::GT, color_mask.min_saturation)));
+		new pcl::FieldComparison<pcl::PointXYZHSV>("s", pcl::ComparisonOps::GT, color_mask.min_saturation)));
 	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("g", pcl::ComparisonOps::LT, color_mask.max_saturation)));
+		new pcl::FieldComparison<pcl::PointXYZHSV>("s", pcl::ComparisonOps::LT, color_mask.max_saturation)));
 	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("b", pcl::ComparisonOps::GT, color_mask.min_value)));
+		new pcl::FieldComparison<pcl::PointXYZHSV>("v", pcl::ComparisonOps::GT, color_mask.min_value)));
 	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("b", pcl::ComparisonOps::LT, color_mask.max_value)));
+		new pcl::FieldComparison<pcl::PointXYZHSV>("v", pcl::ComparisonOps::LT, color_mask.max_value)));
 
 	// Create the filtering object
 	pcl::ConditionalRemoval<pcl::PointXYZHSV> condrem;
@@ -472,7 +492,7 @@ BallPerception::color_mask BallPerception::getColorMask(uint16_t label) {
  */
 void BallPerception::addBallToScene(float x, float y, float z, float radius) {
 
-	RCLCPP_INFO(rclcpp::get_logger("ball_perception"), "Adding ball to the scene");
+	RCLCPP_INFO(logger_, "Adding ball to the scene");
 	// Add a ball to the planning scene
 	moveit_msgs::msg::AttachedCollisionObject ball_object;
 	ball_object.link_name = "soft_gripper_tip_link";

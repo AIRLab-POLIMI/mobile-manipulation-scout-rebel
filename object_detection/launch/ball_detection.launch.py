@@ -14,9 +14,6 @@ import os
 from ament_index_python.packages import get_package_share_directory
 import yaml
 
-# load moveit controllers and parameters from yaml and robot description files
-from moveit_launch import moveit_loader
-
 
 def generate_launch_description():
 
@@ -68,13 +65,6 @@ def generate_launch_description():
         description='Camera frame of reference for depth images',
     )
 
-    # declare launch arguments from moveit loader
-    args = moveit_loader.declare_arguments()
-    # read camera frame from aruco_pose_estimation config file
-    camera_frame_arg = moveit_loader.load_camera_frame_arg()
-
-    args.append(camera_frame_arg)
-
     # launch realsense camera node
     cam_feed_launch_file = PathJoinSubstitution(
         [FindPackageShare("realsense2_camera"), "launch", "rs_launch.py"]
@@ -115,50 +105,7 @@ def generate_launch_description():
         ]
     )
 
-    # launch grasping pose estimator node
-    grasping_pose_estimator_node = Node(
-        name='grasp_pose_estimator',
-        package='soft_grasping',
-        executable='grasp_pose_estimator',
-        parameters=moveit_loader.load_moveit(with_sensors3d=False) + [{
-            # parameters for moveit2_apis library
-            "camera_frame": LaunchConfiguration('camera_rgb_frame'),
-            "load_base": LaunchConfiguration("load_base"),
-            # parameters for the grasping pose estimator node
-            'pointcloud_topic': LaunchConfiguration('pointcloud_topic'),
-            'depth_topic': LaunchConfiguration('depth_topic'),
-            'camera_info_topic': LaunchConfiguration('camera_info_topic'),
-            'camera_rgb_frame': LaunchConfiguration('camera_rgb_frame'),
-            'camera_depth_frame': LaunchConfiguration('camera_depth_frame'),
-        }],
-        output='screen',
-        emulate_tty=True
-    )
-
-    # delay start of the grasping pose estimator node until the realsense camera node is up and running
-    grasping_pose_estimator_node_delayed = TimerAction(
-        period=1.0,
-        actions=[
-            LaunchDescription([
-                grasping_pose_estimator_node
-            ])
-        ]
-    )
-
-    # launch rviz2 with the target click rviz configuration file
-    rviz_file = PathJoinSubstitution([
-        FindPackageShare('soft_grasping'),
-        'rviz',
-        'target_click.rviz'
-    ])
-
-    rviz2_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        arguments=['-d', rviz_file]
-    )
-
-    return LaunchDescription(args + [
+    return LaunchDescription([
         # Arguments
         rgb_topic_arg,
         pointcloud_topic_arg,
@@ -169,6 +116,4 @@ def generate_launch_description():
         # Nodes
         camera_feed_depth_node,
         ball_detector_node_delayed,
-        #grasping_pose_estimator_node_delayed,
-        #rviz2_node
     ])

@@ -73,46 +73,6 @@ def generate_launch_description():
 
     args.append(camera_frame_arg)
 
-    # launch realsense camera node
-    cam_feed_launch_file = PathJoinSubstitution(
-        [FindPackageShare("realsense2_camera"), "launch", "rs_launch.py"]
-    )
-
-    camera_feed_depth_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(cam_feed_launch_file),
-        launch_arguments={
-            "pointcloud.enable": "true",
-            "enable_rgbd": "true",
-            "enable_sync": "true",
-            "align_depth.enable": "true",
-            "enable_color": "true",
-            "enable_depth": "true",
-        }.items(),
-    )
-
-    # launch object detection node: using a trained YOLOv8 model to detect the target object 
-    # from RGB camera feed
-    object_detection_node = Node(
-        name="ball_detection",
-        package='object_detection',
-        executable='ball_detector.py',
-        parameters=[{
-            'rgb_topic': LaunchConfiguration('rgb_topic'),
-        }],
-        output='screen',
-        emulate_tty=True
-    )
-
-    # delay start of the object detection tensorflow model wrapped in ros2 node until the realsense camera node is up and running
-    object_detection_node_delayed = TimerAction(
-        period=1.0,
-        actions=[
-            LaunchDescription([
-                object_detection_node
-            ])
-        ]
-    )
-
     # launch grasping autonomously node: using the detected object's bounding box and the depth map to
     # segment the point cloud and estimate the grasping pose effectively and autonomously
     grasp_autonomous_node = Node(
@@ -124,6 +84,7 @@ def generate_launch_description():
             "camera_frame": LaunchConfiguration('camera_rgb_frame'),
             "load_base": LaunchConfiguration("load_base"),
             # parameters for the grasping pose estimator node
+            'rgb_topic': LaunchConfiguration('rgb_topic'),
             'pointcloud_topic': LaunchConfiguration('pointcloud_topic'),
             'depth_topic': LaunchConfiguration('depth_topic'),
             'camera_info_topic': LaunchConfiguration('camera_info_topic'),
@@ -166,8 +127,6 @@ def generate_launch_description():
         camera_rgb_frame_arg,
         camera_depth_frame_arg,
         # Nodes
-        camera_feed_depth_node,
-        object_detection_node_delayed,
         grasp_autonomous_node_delayed,
         rviz2_node
     ])

@@ -26,8 +26,6 @@ GraspAutonomous::GraspAutonomous(std::shared_ptr<GraspPoseEstimator> grasp_pose_
  * @param msg object detections message
  */
 void GraspAutonomous::object_detections_callback(const mobile_manipulation_interfaces::msg::ObjectDetections::SharedPtr msg) {
-	// log object detections
-	RCLCPP_INFO(logger_, "Received object detections: %ld objects", msg->labels.size());
 
 	std::vector<BallPerception::ObjectDetection> detected;
 	// for each object detected, save the bounding box and class label with confidence score
@@ -46,6 +44,8 @@ void GraspAutonomous::object_detections_callback(const mobile_manipulation_inter
 		std::lock_guard<std::mutex> lock(object_detections_mutex);
 		object_detections = std::make_shared<std::vector<BallPerception::ObjectDetection>>(detected);
 	}
+
+	RCLCPP_INFO(logger_, "Saved object detections: %ld objects", detected.size());
 }
 
 /**
@@ -68,27 +68,39 @@ void GraspAutonomous::mainThreadWithObjectDetections() {
 		// estimate the grasp pose from the estimated object surface point closest to the camera
 		// execute the demo with the estimated grasp pose
 
+		RCLCPP_INFO(logger_, "Waiting for object detections");
+
 		bool acquired = acquireObjectDetections();
 		if (!acquired) {
 			rate.sleep();
 			continue;
 		}
 
+		RCLCPP_INFO(logger_, "Acquired object detections");
+
 		// save the depth map and use it to compute the pointcloud data
-		ball_perception->saveDepthMap();
+		ball_perception->saveRGBDepth();
+
+		RCLCPP_INFO(logger_, "Saved RGB and depth data");
 
 		// select the object detection with the highest confidence score and closest to the camera
 		std::shared_ptr<BallPerception::ObjectDetection> obj_selected = std::make_shared<BallPerception::ObjectDetection>();
 		pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pointcloud;
 		selectObjectPointcloud(obj_selected, segmented_pointcloud);
 
+		RCLCPP_INFO(logger_, "Selected object detection");
+
 		// from the filtered and segmented pointcloud, estimate the point on the object surface
 		geometry_msgs::msg::Point p_center = estimateSphereCenterFromSurfacePointcloud(segmented_pointcloud);
 		grasp_pose_estimator->visualizePoint(p_center, rviz_visual_tools::ORANGE);
 
+		RCLCPP_INFO(logger_, "Estimated object center point");
+
 		// estimate the grasp pose from the object surface point
 		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose =
 			std::make_shared<geometry_msgs::msg::PoseStamped>(grasp_pose_estimator->estimateGraspingPose(p_center));
+
+		RCLCPP_INFO(logger_, "Estimated grasp pose");
 
 		// empty grasp pose, wait for new input
 		if (grasp_pose->pose.position.x == 0 && grasp_pose->pose.position.y == 0 &&
@@ -96,6 +108,8 @@ void GraspAutonomous::mainThreadWithObjectDetections() {
 			RCLCPP_ERROR(logger_, "Failed to estimate feasible grasping pose");
 			continue;
 		}
+
+		RCLCPP_INFO(logger_, "Executing demo");
 
 		grasp_pose_estimator->executeDemo(grasp_pose);
 
@@ -110,6 +124,9 @@ void GraspAutonomous::mainThreadWithObjectDetections() {
 bool GraspAutonomous::acquireObjectDetections() {
 	{
 		std::lock_guard<std::mutex> lock(object_detections_mutex);
+		if (object_detections == nullptr) {
+			return false;
+		}
 		if (object_detections->size() == 0) {
 			return false;
 		}
@@ -137,9 +154,17 @@ void GraspAutonomous::selectObjectPointcloud(
 	// select the object detection with the highest confidence score
 	float max_distance = 1.5, min_distance = max_distance; // set a maximum distance to the camera in meters
 
-	for (auto &obj : *object_detections_saved) {
+	for (BallPerception::ObjectDetection &obj : *object_detections_saved) {
 
+		RCLCPP_INFO(logger_, "Object detection: label %d, confidence: %f", obj.label, obj.score);
 		pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pcl = ball_perception->generateSegmentedPointCloud(obj, max_distance);
+
+		int segmented_pcl_size = segmented_pcl->size();
+		RCLCPP_INFO(logger_, "Segmented pointcloud size: %ld", segmented_pcl->size());
+		if (segmented_pcl_size == 0) {
+			RCLCPP_INFO(logger_, "Not enough points in the pointcloud");
+			continue;
+		}
 
 		// compute centroid of the segmented pointcloud
 		Eigen::Vector4f centroid;
@@ -155,7 +180,7 @@ void GraspAutonomous::selectObjectPointcloud(
 	}
 
 	// save the selected object detection and segmented pointcloud to the input parameters passed by reference
-	object_selected = std::make_shared<BallPerception::ObjectDetection>(obj_selected);
+	*object_selected = obj_selected;
 	segmented_pointcloud = segmented_pcl_selected;
 }
 

@@ -148,7 +148,7 @@ public:
 	 * @return the filtered pointcloud
 	 */
 	pcl::PointCloud<pcl::PointXYZ>::Ptr filterPointCloudByDistance(pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud,
-																   float max_distance);
+																   float max_distance = 1.5);
 
 	/**
 	 * @brief given a pointcloud, it filters data outside the specified range distance and returns the filtered pointcloud
@@ -157,7 +157,7 @@ public:
 	 * @return the filtered pointcloud with color information and points within the specified distance
 	 */
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr filterPointCloudByDistance(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_cloud,
-																	  float max_distance);
+																	  float max_distance = 1.5);
 
 	/**
 	 * @brief given a colored pointcloud, it applies a color mask filter and returns the pointcloud
