@@ -27,11 +27,13 @@ from cv_bridge import CvBridge
 
 # Tensorflow imports
 import tensorflow as tf
-import keras_cv
+import keras
+from keras_cv.models import object_detection
 
 # python imports
 import threading
 import os
+os.environ["KERAS_BACKEND"] = "tensorflow"
 import numpy as np
 from matplotlib import pyplot as plt
 from ament_index_python.packages import get_package_share_directory
@@ -41,10 +43,10 @@ class BallDetector(Node):
 
     TEXT_COLOR = (255, 255, 255)  # White
     COLOR_MAPPING = {
-        0: (0, 0, 255),  # blue
+        0: (255, 0, 0),  # blue
         1: (0, 255, 0),  # green
-        2: (255, 0, 0),  # red
-        3: (255, 250, 0),  # yellow
+        2: (0, 0, 255),  # red
+        3: (0, 250, 255),  # yellow
     }
 
     def __init__(self):
@@ -70,6 +72,7 @@ class BallDetector(Node):
         self.window_name = "RGB Feed"
         cv2.namedWindow(self.window_name)
         self.cv_image = None
+        self.cv_predicted = None
 
         # create continuously running thread for performing inference with the trained model
         self.inference_thread = threading.Thread(target=self.inference_thread)
@@ -85,7 +88,7 @@ class BallDetector(Node):
 
         """
         # do something with the image
-        self.cv_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
+        self.cv_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding="rgb8")
 
     def load_model_inference(self):
         # class mapping = dictionary from class index to class name
@@ -97,8 +100,9 @@ class BallDetector(Node):
         }
 
         # print the tensorflow version and the available GPU devices
-        self.get_logger().info("Tensorflow version: ", tf.__version__)
-        self.get_logger().info("GPU is", "available" if tf.config.list_physical_devices('GPU') else "NOT AVAILABLE")
+        self.get_logger().info(f"Tensorflow version: {tf.__version__}")
+        self.get_logger().info("GPU is available" if tf.config.list_physical_devices('GPU') else "GPU NOT AVAILABLE")
+        self.get_logger().info(f"Keras version: {keras.__version__}")
 
         # load the trained model for inference
         self.model_path = os.path.join(
@@ -123,9 +127,8 @@ class BallDetector(Node):
             if self.cv_image is not None:
                 # perform inference with the trained model
                 # and publish the detected object coordinates
-
-                img = np.expand_dims(self.cv_image, axis=0)
-                self.get_logger().info(f"Performing inference...")
+                #img = cv2.cvtColor(self.cv_image, cv2.COLOR_BGR2RGB)
+                img = np.expand_dims(self.cv_image, axis=0).astype(np.uint8)
 
                 # measure the inference time
                 start_time = cv2.getTickCount()
@@ -138,19 +141,23 @@ class BallDetector(Node):
                 inference_time = (end_time - start_time) / cv2.getTickFrequency()
                 self.get_logger().info(f"Inference time: {inference_time:.3f} s")
 
+                # extract the first index at which -1 is found in the labels list
+                # filter out all elements after the first occurrence of -1
+                # meaning that the rest of the elements are invalid predictions
+                labels = np.array(predictions["classes"][0]).astype(np.int32)
+                invalid_index = labels.tolist().index(-1)
+                labels = labels[:invalid_index].astype(np.uint16)
+                bboxes = np.array(predictions["boxes"][0])[:invalid_index, :]
+                confidence = np.array(predictions["confidence"][0])[:invalid_index]
+
                 # visualize the detected object predictions
-                bboxes = np.array(predictions["boxes"][0])
-                labels = np.array(predictions["classes"][0])
-                confidence = np.array(predictions["confidence"][0])
                 self.cv_predicted = self.visualize_single_pred(img, bboxes, labels, confidence)
 
                 # publish the detected object coordinates
                 object_detections = ObjectDetections()
-                object_detections.header.stamp = self.get_clock().now().to_msg()
-                object_detections.header.frame_id = "camera_link"
                 # linearize the bounding boxes vector
                 # and store the detected object coordinates with their respective class labels
-                object_detections.bboxes = bboxes.flatten().tolist()
+                object_detections.bounding_boxes = bboxes.flatten().tolist()
                 object_detections.labels = labels.tolist()
                 object_detections.confidences = confidence.tolist()
 
@@ -164,18 +171,18 @@ class BallDetector(Node):
 
     def visualize_single_pred(self, image, bboxes, labels, confidences):
         """Visualizes a batch of images with bounding boxes in a single plot."""
-        batched_image = image.numpy().astype(np.int32).copy()
+        batched_image = image.astype(np.uint8).copy()
         image = np.squeeze(batched_image, axis=0)
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         for bbox, label, confidence in zip(bboxes, labels, confidences):
-            if int(label) != -1:
-                class_name = self.class_mapping[label]
-                image = self.visualize_bbox(
-                    image,
-                    bbox,
-                    class_name,
-                    confidence=f"{confidence:.2f}",
-                    color=self.COLOR_MAPPING[label],
-                )
+            class_name = self.class_mapping[label]
+            image = self.visualize_bbox(
+                image,
+                bbox,
+                class_name,
+                confidence=f"{confidence:.2f}",
+                color=self.COLOR_MAPPING[label],
+            )
         return image
 
     def visualize_bbox(self, img, bbox, class_name, color, confidence=""):
@@ -212,7 +219,8 @@ class BallDetector(Node):
             cv2.waitKey(1)
         elif self.cv_image is not None:
             # display raw image
-            cv2.imshow(self.window_name, self.cv_image)
+            image = cv2.cvtColor(self.cv_image, cv2.COLOR_BGR2RGB)
+            cv2.imshow(self.window_name, image)
             cv2.waitKey(1)
 
     def initialize_parameters(self):

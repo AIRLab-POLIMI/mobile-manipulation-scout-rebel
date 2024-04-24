@@ -1,13 +1,12 @@
 
 # ROS2 imports
-from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, TextSubstitution
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
 from launch.actions import IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch_ros.substitutions import FindPackageShare
-from launch.conditions import IfCondition, UnlessCondition
 
 # Python imports
 import os
@@ -94,10 +93,10 @@ def generate_launch_description():
 
     # launch target click node: click on the target on the RGB image window to get the pixel coordinates
     # of the target in the camera frame, for testing purposes
-    ball_detector_node = Node(
-        name="ball_detector",
-        package='object_detection',
-        executable='ball_detector.py',
+    target_click_node = Node(
+        name="target_click",
+        package='soft_grasping',
+        executable='target_click.py',
         parameters=[{
             'rgb_topic': LaunchConfiguration('rgb_topic'),
         }],
@@ -106,20 +105,20 @@ def generate_launch_description():
     )
 
     # delay start of the grasping pose estimator node until the realsense camera node is up and running
-    ball_detector_node_delayed = TimerAction(
+    target_click_node_delayed = TimerAction(
         period=1.0,
         actions=[
             LaunchDescription([
-                ball_detector_node
+                target_click_node
             ])
         ]
     )
 
     # launch grasping pose estimator node
-    grasping_pose_estimator_node = Node(
-        name='grasp_pose_estimator',
+    grasp_with_input_click_node = Node(
+        name='grasp_with_input_click',
         package='soft_grasping',
-        executable='grasp_pose_estimator',
+        executable='grasp_with_input_click',
         parameters=moveit_loader.load_moveit(with_sensors3d=False) + [{
             # parameters for moveit2_apis library
             "camera_frame": LaunchConfiguration('camera_rgb_frame'),
@@ -136,11 +135,11 @@ def generate_launch_description():
     )
 
     # delay start of the grasping pose estimator node until the realsense camera node is up and running
-    grasping_pose_estimator_node_delayed = TimerAction(
+    grasp_with_input_click_node_delayed = TimerAction(
         period=1.0,
         actions=[
             LaunchDescription([
-                grasping_pose_estimator_node
+                grasp_with_input_click_node
             ])
         ]
     )
@@ -168,7 +167,7 @@ def generate_launch_description():
         camera_depth_frame_arg,
         # Nodes
         camera_feed_depth_node,
-        ball_detector_node_delayed,
-        #grasping_pose_estimator_node_delayed,
-        #rviz2_node
+        target_click_node_delayed,
+        grasp_with_input_click_node_delayed,
+        rviz2_node
     ])

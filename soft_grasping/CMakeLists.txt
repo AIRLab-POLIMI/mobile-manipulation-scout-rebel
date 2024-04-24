@@ -34,26 +34,54 @@ find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
 find_package(pcl_msgs REQUIRED)
+
 # ----------------------- C++ -----------------------
 include_directories(include ${OpenCV_INCLUDE_DIRS})
 
-# grasping pose estimator
-add_executable(grasp_pose_estimator
-	src/grasping_main.cpp
+# ---------------------------------------------------------------
+# DEMO 1: Grasp with input click (click on the object to grasp)
+# ---------------------------------------------------------------
+
+add_executable(grasp_with_input_click
+	src/main_grasp_with_input_click.cpp
+	src/grasp_with_click.cpp
 	src/grasp_pose_estimator.cpp
 	src/ball_perception.cpp
 )
-ament_target_dependencies(grasp_pose_estimator
+ament_target_dependencies(grasp_with_input_click
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
 	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs tf2_kdl
 	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_servers
 	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
-target_link_libraries(grasp_pose_estimator
+target_link_libraries(grasp_with_input_click
 	${OpenCV_LIBS}
 	${PCL_LIBRARIES}
 )
 install(TARGETS
-	grasp_pose_estimator
+	grasp_with_input_click
+	DESTINATION lib/${PROJECT_NAME}
+)
+
+# ---------------------------------------------------------------
+# DEMO 2: Grasp autonomously with object detection pipeline
+# ---------------------------------------------------------------
+add_executable(grasp_autonomous
+	src/main_grasp_autonomous.cpp
+	src/grasp_autonomous.cpp
+	src/grasp_pose_estimator.cpp
+	src/ball_perception.cpp
+)
+ament_target_dependencies(grasp_autonomous
+	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
+	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs tf2_kdl
+	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_servers
+	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
+target_link_libraries(grasp_autonomous
+	${OpenCV_LIBS}
+	${PCL_LIBRARIES}
+)
+install(TARGETS
+	grasp_autonomous
 	DESTINATION lib/${PROJECT_NAME}
 )
 

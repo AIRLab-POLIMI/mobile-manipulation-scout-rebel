@@ -1,13 +1,12 @@
 
 # ROS2 imports
-from launch.substitutions import PathJoinSubstitution, LaunchConfiguration, TextSubstitution
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
 from launch.actions import IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch_ros.substitutions import FindPackageShare
-from launch.conditions import IfCondition, UnlessCondition
 
 # Python imports
 import os
@@ -16,7 +15,6 @@ import yaml
 
 # load moveit controllers and parameters from yaml and robot description files
 from moveit_launch import moveit_loader
-
 
 def generate_launch_description():
 
@@ -92,12 +90,12 @@ def generate_launch_description():
         }.items(),
     )
 
-    # launch target click node: click on the target on the RGB image window to get the pixel coordinates
-    # of the target in the camera frame, for testing purposes
-    target_click_node = Node(
-        name="target_click",
-        package='soft_grasping',
-        executable='target_click.py',
+    # launch object detection node: using a trained YOLOv8 model to detect the target object 
+    # from RGB camera feed
+    object_detection_node = Node(
+        name="ball_detection",
+        package='object_detection',
+        executable='ball_detector.py',
         parameters=[{
             'rgb_topic': LaunchConfiguration('rgb_topic'),
         }],
@@ -105,21 +103,22 @@ def generate_launch_description():
         emulate_tty=True
     )
 
-    # delay start of the grasping pose estimator node until the realsense camera node is up and running
-    target_click_node_delayed = TimerAction(
+    # delay start of the object detection tensorflow model wrapped in ros2 node until the realsense camera node is up and running
+    object_detection_node_delayed = TimerAction(
         period=1.0,
         actions=[
             LaunchDescription([
-                target_click_node
+                object_detection_node
             ])
         ]
     )
 
-    # launch grasping pose estimator node
-    grasping_pose_estimator_node = Node(
-        name='grasp_pose_estimator',
+    # launch grasping autonomously node: using the detected object's bounding box and the depth map to
+    # segment the point cloud and estimate the grasping pose effectively and autonomously
+    grasp_autonomous_node = Node(
+        name='grasp_autonomous',
         package='soft_grasping',
-        executable='grasp_pose_estimator',
+        executable='grasp_autonomous',
         parameters=moveit_loader.load_moveit(with_sensors3d=False) + [{
             # parameters for moveit2_apis library
             "camera_frame": LaunchConfiguration('camera_rgb_frame'),
@@ -135,21 +134,21 @@ def generate_launch_description():
         emulate_tty=True
     )
 
-    # delay start of the grasping pose estimator node until the realsense camera node is up and running
-    grasping_pose_estimator_node_delayed = TimerAction(
-        period=1.0,
+    # delay start of the grasp_autonomous node until the object_detection node is up and running
+    grasp_autonomous_node_delayed = TimerAction(
+        period=3.0,
         actions=[
             LaunchDescription([
-                grasping_pose_estimator_node
+                grasp_autonomous_node
             ])
         ]
     )
 
-    # launch rviz2 with the target click rviz configuration file
+    # launch rviz2 with the target autonomous rviz configuration file
     rviz_file = PathJoinSubstitution([
         FindPackageShare('soft_grasping'),
         'rviz',
-        'target_click.rviz'
+        'target_detection.rviz'
     ])
 
     rviz2_node = Node(
@@ -168,7 +167,7 @@ def generate_launch_description():
         camera_depth_frame_arg,
         # Nodes
         camera_feed_depth_node,
-        target_click_node_delayed,
-        grasping_pose_estimator_node_delayed,
+        object_detection_node_delayed,
+        grasp_autonomous_node_delayed,
         rviz2_node
     ])

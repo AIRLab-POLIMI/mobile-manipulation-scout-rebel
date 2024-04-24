@@ -15,41 +15,12 @@ GraspPoseEstimator::GraspPoseEstimator(std::shared_ptr<MoveIt2APIs> moveit2_api_
 	: Node("grasp_pose_estimator", options),
 	  moveit2_api_(moveit2_api_node),
 	  ball_perception_(ball_perception_node),
-	  fixed_base_frame(moveit2_api_->fixed_base_frame) {
-
-	// initialize parameters
-	initParams();
-
-	// subscribe to object coordinates topic
-	object_coords_subscriber = this->create_subscription<mobile_manipulation_interfaces::msg::ObjectCoords>(
-		"/object_coords", 10, std::bind(&GraspPoseEstimator::object_coords_callback, this, std::placeholders::_1));
-
-	// subscribe to camera info topic
-	camera_info_subscriber = this->create_subscription<sensor_msgs::msg::CameraInfo>(
-		camera_info_topic, 10, std::bind(&GraspPoseEstimator::camera_info_callback, this, std::placeholders::_1));
-
-	// subscribe to depth map topic
-	depth_map_subscriber = this->create_subscription<sensor_msgs::msg::Image>(
-		depth_topic, 10, std::bind(&GraspPoseEstimator::depth_map_callback, this, std::placeholders::_1));
+	  fixed_base_frame(moveit2_api_->fixed_base_frame),
+	  // read camera frame name from the parameter server
+	  camera_rgb_frame(this->get_parameter("camera_rgb_frame").as_string()) {
 
 	// publish grasp pose to topic
 	grasp_pose_publisher = this->create_publisher<geometry_msgs::msg::PoseStamped>("/grasp_pose", 10);
-}
-
-/**
- * @brief Initialize parameters read from the yaml config file
- */
-void GraspPoseEstimator::initParams() {
-
-	// get parameters
-	depth_topic = get_parameter("depth_topic").as_string();
-	camera_info_topic = get_parameter("camera_info_topic").as_string();
-	camera_rgb_frame = get_parameter("camera_rgb_frame").as_string();
-
-	// log parameters
-	RCLCPP_INFO(logger_, "camera_info_topic: %s", camera_info_topic.c_str());
-	RCLCPP_INFO(logger_, "camera_rgb_frame: %s", camera_rgb_frame.c_str());
-	RCLCPP_INFO(logger_, "depth_topic: %s", depth_topic.c_str());
 }
 
 /**
@@ -58,75 +29,6 @@ void GraspPoseEstimator::initParams() {
  */
 void GraspPoseEstimator::setVisualTools(std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools) {
 	this->visual_tools_ = visual_tools;
-}
-
-/**
- * @brief Callback function for receiving object coordinates from /object_coords topic
- * 		updates the object coordinates for the main thread to estimate the grasp pose
- * @param msg object coordinates message
- */
-void GraspPoseEstimator::object_coords_callback(const mobile_manipulation_interfaces::msg::ObjectCoords::SharedPtr msg) {
-	// log object coordinates
-	RCLCPP_INFO(logger_, "Received object center pixel coordinates: x=%d, y=%d", msg->x, msg->y);
-	{
-		std::lock_guard<std::mutex> lock(object_coords_mutex);
-		object_x = msg->x;
-		object_y = msg->y;
-	}
-}
-
-/**
- * @brief Callback function for receiving camera info msgs containing intrinsic parameters
- * @param msg camera info message
- */
-void GraspPoseEstimator::camera_info_callback(const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
-
-	// fill camera info parameters
-	fx = msg->k[0];
-	fy = msg->k[4];
-	cx = msg->k[2];
-	cy = msg->k[5];
-
-	image_width = msg->width;
-	image_height = msg->height;
-
-	// fill distortion parameters
-	distortion = std::vector<double>(msg->d);
-
-	// fill projection matrix
-	projection_matrix = std::array<double, 12>(msg->p);
-
-	// fill rectification matrix
-	rectification_matrix = std::array<double, 9>(msg->r);
-
-	depth_map = std::make_shared<cv::Mat>(image_width, image_height, CV_16UC1);
-	depth_map_saved = std::make_shared<cv::Mat>(image_width, image_height, CV_16UC1);
-
-	// log camera info parameters
-	RCLCPP_INFO(logger_, "Received camera info message");
-
-	// assuming the camera info message is received once and always valid, remove the subscriber
-	camera_info_subscriber.reset();
-}
-
-/**
- * @brief Callback function for receiving camera depth map msgs
- * @param msg depth map message
- */
-void GraspPoseEstimator::depth_map_callback(const sensor_msgs::msg::Image::SharedPtr msg) {
-	// bridge the depth map message to cv::Mat
-	cv_bridge::CvImagePtr cv_ptr;
-	try {
-		cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_16UC1);
-
-	} catch (cv_bridge::Exception &e) {
-		RCLCPP_ERROR(logger_, "cv_bridge exception: %s", e.what());
-		return;
-	}
-	{
-		std::lock_guard<std::mutex> lock(depth_map_mutex);
-		*depth_map = cv_ptr->image;
-	}
 }
 
 /**
@@ -148,181 +50,98 @@ void GraspPoseEstimator::dropBallToContainer() {
 }
 
 /**
- * @brief Main thread function for the GraspPoseEstimator node
- * 	This thread checks for updates in object coordinates and estimates the grasp pose
+ * @brief demo execution
+ * @param grasp_pose the grasp pose to execute
  */
-void GraspPoseEstimator::mainThread() {
-	// set the rate for the main thread
-	rclcpp::Rate rate(15);
+void GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose) {
+	/* first version of the demo: reach directly the grasping pose and grip the ball
+	// first open with the gripper for picking up the ball
+	moveit2_api_->pump_release();
 
-	// move to static search pose to look for the ball
-	moveToReadyPose();
+	// then move to the grasping pose
+	bool success = moveit2_api_->robotPlanAndMove(grasp_pose);
 
-	unsigned short x = 0, y = 0;
+	// wait for new input if the move to the grasping pose fails
+	if (!success) {
+		RCLCPP_ERROR(logger_, "Failed to move to the grasping pose");
+		moveit2_api_->pump_off();
+		continue;
+	}
 
-	while (rclcpp::ok()) {
-		// check for updates in object coordinates
-		// estimate the grasp pose
-		// publish the grasp pose
-		bool acquired = acquireDepthData(x, y);
+	// then grip the ball
+	moveit2_api_->pump_grip();
+	*/
 
-		if (!acquired) {
-			rate.sleep();
-			continue;
-		}
-		// estimate grasp pose from the center pixel coordinate
-		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose =
-			std::make_shared<geometry_msgs::msg::PoseStamped>(estimateGraspingPose(x, y));
+	// Second version of the demo: move to the pre-grasping pose, then to the grasping pose
+	// first compute the pre-grasp pose from the grasping pose
+	geometry_msgs::msg::Pose::UniquePtr pre_grasp_pose = moveit2_api_->apply_transform(
+		std::make_shared<geometry_msgs::msg::Pose>(grasp_pose->pose), -linear_motion, 0.0, 0.0, false);
 
-		// empty grasp pose, wait for new input
-		if (grasp_pose->pose.position.x == 0 && grasp_pose->pose.position.y == 0 &&
-			grasp_pose->pose.position.z == 0) {
-			RCLCPP_ERROR(logger_, "Failed to estimate feasible grasping pose");
-			continue;
-		}
+	geometry_msgs::msg::PoseStamped::SharedPtr pre_grasp_pose_stamped =
+		std::make_shared<geometry_msgs::msg::PoseStamped>();
+	pre_grasp_pose_stamped->header.frame_id = fixed_base_frame;
+	pre_grasp_pose_stamped->header.stamp = this->now();
+	pre_grasp_pose_stamped->pose = *pre_grasp_pose;
 
-		// publish the grasp pose
-		grasp_pose_publisher->publish(*grasp_pose);
+	// then move to the pre-grasp pose
+	bool success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
+	if (!success) {
+		RCLCPP_ERROR(logger_, "Failed to move to the pre-grasping pose");
+		return;
+	}
 
-		/* first version of the demo: reach directly the grasping pose and grip the ball
-		// first open with the gripper for picking up the ball
-		moveit2_api_->pump_release();
+	// open the gripper for picking up the ball
+	moveit2_api_->pump_release();
 
-		// then move to the grasping pose
-		bool success = moveit2_api_->robotPlanAndMove(grasp_pose);
+	// linear motion to the grasping pose
+	geometry_msgs::msg::Pose::SharedPtr pre_grasp_pose_ptr = std::make_shared<geometry_msgs::msg::Pose>(*pre_grasp_pose);
+	auto linear_path = moveit2_api_->computeLinearWaypoints(pre_grasp_pose_ptr, linear_motion, 0.0, 0.0);
+	double percent_motion = moveit2_api_->robotPlanAndMove(linear_path);
+	if (percent_motion < 1.0) {
+		RCLCPP_ERROR(logger_, "Failed to move to the grasping pose with cartesian path planning");
 
-		// wait for new input if the move to the grasping pose fails
+		// attempt instead the direct motion without cartesian path planning
+		success = moveit2_api_->robotPlanAndMove(grasp_pose);
+
 		if (!success) {
-			RCLCPP_ERROR(logger_, "Failed to move to the grasping pose");
+			RCLCPP_ERROR(logger_, "Failed to move to the grasping pose directly");
 			moveit2_api_->pump_off();
-			continue;
+			moveToReadyPose();
+			// skip the rest of the loop
+			return;
 		}
+	}
 
-		// then grip the ball
-		moveit2_api_->pump_grip();
-		*/
+	// grip the ball
+	moveit2_api_->pump_grip();
 
-		// Second version of the demo: move to the pre-grasping pose, then to the grasping pose
-		// first compute the pre-grasp pose from the grasping pose
-		geometry_msgs::msg::Pose::UniquePtr pre_grasp_pose = moveit2_api_->apply_transform(
-			std::make_shared<geometry_msgs::msg::Pose>(grasp_pose->pose), -linear_motion, 0.0, 0.0, false);
+	// move to the pre-grasping pose with linear motion
+	auto linear_path_back = moveit2_api_->computeLinearWaypoints(-linear_motion, 0.0, 0.0);
+	percent_motion = moveit2_api_->robotPlanAndMove(linear_path_back);
+	if (percent_motion < 1.0) {
+		RCLCPP_ERROR(logger_, "Failed to move back from the grasping pose with cartesian path planning");
 
-		geometry_msgs::msg::PoseStamped::SharedPtr pre_grasp_pose_stamped =
-			std::make_shared<geometry_msgs::msg::PoseStamped>();
-		pre_grasp_pose_stamped->header.frame_id = fixed_base_frame;
-		pre_grasp_pose_stamped->header.stamp = this->now();
-		pre_grasp_pose_stamped->pose = *pre_grasp_pose;
-
-		// then move to the pre-grasp pose
-		bool success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
+		// attempt instead direct motion without cartesian path planning
+		success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
 		if (!success) {
-			RCLCPP_ERROR(logger_, "Failed to move to the pre-grasping pose");
-			continue;
-		}
-
-		// open the gripper for picking up the ball
-		moveit2_api_->pump_release();
-
-		// linear motion to the grasping pose
-		geometry_msgs::msg::Pose::SharedPtr pre_grasp_pose_ptr = std::make_shared<geometry_msgs::msg::Pose>(*pre_grasp_pose);
-		auto linear_path = moveit2_api_->computeLinearWaypoints(pre_grasp_pose_ptr, linear_motion, 0.0, 0.0);
-		double percent_motion = moveit2_api_->robotPlanAndMove(linear_path);
-		if (percent_motion < 1.0) {
-			RCLCPP_ERROR(logger_, "Failed to move to the grasping pose with cartesian path planning");
-
-			// attempt instead the direct motion without cartesian path planning
-			success = moveit2_api_->robotPlanAndMove(grasp_pose);
-
-			if (!success) {
-				RCLCPP_ERROR(logger_, "Failed to move to the grasping pose directly");
-				moveit2_api_->pump_off();
-				moveToReadyPose();
-				// skip the rest of the loop
-				rate.sleep();
-				continue;
-			}
-		}
-
-		// grip the ball
-		moveit2_api_->pump_grip();
-
-		// move to the pre-grasping pose with linear motion
-		auto linear_path_back = moveit2_api_->computeLinearWaypoints(-linear_motion, 0.0, 0.0);
-		percent_motion = moveit2_api_->robotPlanAndMove(linear_path_back);
-		if (percent_motion < 1.0) {
-			RCLCPP_ERROR(logger_, "Failed to move back from the grasping pose with cartesian path planning");
-
-			// attempt instead direct motion without cartesian path planning
-			success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
-			if (!success) {
-				RCLCPP_ERROR(logger_, "Failed to move back from the grasping pose directly");
-			}
-		}
-
-		// move back to the ready pose
-		moveToReadyPose();
-		// drop the ball to the container: release then turn off the pump
-		dropBallToContainer();
-		// move back to the ready pose, ready for the next ball
-		moveToReadyPose();
-
-		rate.sleep();
-	}
-}
-
-/**
- * @brief Acquire the depth data from the depth map at the given pixel coordinates
- * @param x x-coordinate of the pixel, address to store the acquired depth data
- * @param y y-coordinate of the pixel, address to store the acquired depth data
- * @return bool true if the depth data is acquired successfully, false if not valid or already acquired
- */
-bool GraspPoseEstimator::acquireDepthData(unsigned short &x, unsigned short &y) {
-	int x_temp = 0, y_temp = 0;
-	// save object center pixel coordinates
-	{ // acquire lock on object pixel coordinates
-		std::lock_guard<std::mutex> lock(object_coords_mutex);
-		if (object_x != 0 && object_y != 0) {
-			x_temp = object_x;
-			y_temp = object_y;
+			RCLCPP_ERROR(logger_, "Failed to move back from the grasping pose directly");
 		}
 	}
 
-	// if object coordinates are not received, wait for the next iteration
-	if (x_temp == 0 && y_temp == 0) {
-		return false;
-	} else if (x_temp == x && y_temp == y) {
-		// if the object coordinates are the same as the previous iteration, wait for the next iteration
-		return false;
-	} else {
-		// update the object coordinates
-		x = x_temp;
-		y = y_temp;
-	}
-
-	// save depth map
-	{ // acquire lock on depth map
-		std::lock_guard<std::mutex> lock(depth_map_mutex);
-		depth_map->copyTo(*depth_map_saved);
-	}
-	return true;
+	// move back to the ready pose
+	moveToReadyPose();
+	// drop the ball to the container: release then turn off the pump
+	dropBallToContainer();
+	// move back to the ready pose, ready for the next ball
+	moveToReadyPose();
 }
 
 /**
  * @brief Estimates the grasp pose for the object at the given coordinates
- * @param x x-coordinate of the object in the camera frame
- * @param y y-coordinate of the object in the camera frame
+ * @param ball_center estimated center of the ball, in the camera frame of reference
  * @return geometry_msgs::msg::PoseStamped estimated grasp pose
  */
-geometry_msgs::msg::PoseStamped GraspPoseEstimator::estimateGraspingPose(int x, int y) {
-	RCLCPP_INFO(logger_, "Estimating grasp pose for object at pixel coordinates: x=%d, y=%d", x, y);
-
-	// compute 3D point in the camera frame from the pixel coordinates
-	geometry_msgs::msg::Point p_closest = computePointCloud(x, y);
-	visualizePoint(p_closest, rviz_visual_tools::ORANGE);
-
-	// compute the center of the ball given the closest point to the camera
-	geometry_msgs::msg::Point ball_center = computeBallCenter(p_closest);
-	visualizePoint(ball_center);
+geometry_msgs::msg::PoseStamped GraspPoseEstimator::estimateGraspingPose(geometry_msgs::msg::Point ball_center) {
 
 	// compute the grasp pose from the center of the ball
 	auto grasp_sample_poses = generateSamplingGraspingPoses(ball_center);
@@ -342,47 +161,8 @@ geometry_msgs::msg::PoseStamped GraspPoseEstimator::estimateGraspingPose(int x, 
 }
 
 /**
- * @brief Computes the 3D point in the camera frame from the given pixel coordinates
- * @param x x-coordinate of the pixel
- * @param y y-coordinate of the pixel
- * @return geometry_msgs::msg::Point 3D point in the camera frame
- */
-geometry_msgs::msg::Point GraspPoseEstimator::computePointCloud(int x, int y) {
-	// compute the 3D point in the camera frame, from the pixel coordinates x, y
-	// using the camera intrinsic parameters and depth map value at x, y
-	geometry_msgs::msg::Point p;
-	float depth = (float)depth_map_saved->at<uint16_t>(y, x) * depth_scale;
-	p.x = (x - cx) * depth / fx;
-	p.y = (y - cy) * depth / fy;
-	p.z = depth;
-
-	return p;
-}
-
-/**
- * @brief Computes the 3d pointcloud from the depth map given the pixel bounding box coordinates
- * @param x x-coordinate of the top-left corner of the bounding box
- * @param y y-coordinate of the top-left corner of the bounding box
- * @param width width of the bounding box
- * @param height height of the bounding box
- * @return std::vector<geometry_msgs::msg::Point> 3D pointcloud in the camera frame
- */
-std::vector<geometry_msgs::msg::Point> GraspPoseEstimator::computePointCloud(int x, int y, int width, int height) {
-	// compute the 3D pointcloud in the camera frame
-	std::vector<geometry_msgs::msg::Point> pointcloud;
-	for (int i = x; i < x + width; i++) {
-		for (int j = y; j < y + height; j++) {
-			geometry_msgs::msg::Point p = computePointCloud(i, j);
-			pointcloud.push_back(p);
-		}
-	}
-
-	return pointcloud;
-}
-
-/**
  * @brief Computes the center of the ball given the closest point to the camera
- * @param p_closest closest point to the camera
+ * @param p_closest closest point to the camera on the surface of the object, expressed in the camera frame
  * @return geometry_msgs::msg::Point estimated center of the ball
  */
 geometry_msgs::msg::Point GraspPoseEstimator::computeBallCenter(geometry_msgs::msg::Point p_closest) {
@@ -424,12 +204,12 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 	RCLCPP_INFO(logger_, "Estimated ball center in fixed frame: x=%f, y=%f, z=%f", ball_center_base.x,
 				ball_center_base.y, ball_center_base.z);
 
-	//NOTE: the following code is commented because Octomap is not used in this version of the code
-	// add collision object to the planning scene
-	// ball_perception_->addBallToScene(ball_center_base.x, ball_center_base.y, ball_center_base.z, ball_radius);
-	// remove the points inside the sphere from the pointcloud
-	//Eigen::Vector3f center_v(ball_center_base.x, ball_center_base.y, ball_center_base.z);
-	//ball_perception_->setFilterRemoveSphere(center_v, ball_radius * 2.0);
+	// NOTE: the following code is commented because Octomap is not used in this version of the code
+	//  add collision object to the planning scene
+	//  ball_perception_->addBallToScene(ball_center_base.x, ball_center_base.y, ball_center_base.z, ball_radius);
+	//  remove the points inside the sphere from the pointcloud
+	// Eigen::Vector3f center_v(ball_center_base.x, ball_center_base.y, ball_center_base.z);
+	// ball_perception_->setFilterRemoveSphere(center_v, ball_radius * 2.0);
 
 	float theta_min = -180.0 * M_PI / 180.0, theta_max = 60.0 * M_PI / 180.0;
 	for (int i = 0; i < n_grasp_sample_poses; i++) {
