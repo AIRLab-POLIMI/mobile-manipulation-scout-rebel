@@ -10,12 +10,11 @@ Laboratory: Artificial Intelligence and Robotics Laboratory (AIRLab)
 
 # ROS2 imports
 import rclpy
-from rclpy.qos import qos_profile_sensor_data
 from rclpy.node import Node
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
+from ament_index_python.packages import get_package_share_directory
 
 # messages imports
-from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image
 
 # custom ROS2 interfaces
@@ -33,10 +32,7 @@ from keras_cv.models import object_detection
 # python imports
 import threading
 import os
-os.environ["KERAS_BACKEND"] = "tensorflow"
 import numpy as np
-from matplotlib import pyplot as plt
-from ament_index_python.packages import get_package_share_directory
 
 
 class BallDetector(Node):
@@ -108,7 +104,7 @@ class BallDetector(Node):
         self.model_path = os.path.join(
             get_package_share_directory("object_detection"),
             "models",
-            "yolov8s_100.keras"
+            "yolov8s_600_v2.keras"
         )
         self.yolo_model = tf.keras.models.load_model(self.model_path)
         self.get_logger().info("Model loaded successfully!")
@@ -127,7 +123,6 @@ class BallDetector(Node):
             if self.cv_image is not None:
                 # perform inference with the trained model
                 # and publish the detected object coordinates
-                #img = cv2.cvtColor(self.cv_image, cv2.COLOR_BGR2RGB)
                 img = np.expand_dims(self.cv_image, axis=0).astype(np.uint8)
 
                 # measure the inference time
@@ -155,6 +150,8 @@ class BallDetector(Node):
 
                 # publish the detected object coordinates
                 object_detections = ObjectDetections()
+                object_detections.header.stamp = self.get_clock().now().to_msg() # current time
+                object_detections.header.frame_id = "camera_link" # not actually used
                 # linearize the bounding boxes vector
                 # and store the detected object coordinates with their respective class labels
                 object_detections.bounding_boxes = bboxes.flatten().tolist()
@@ -224,7 +221,7 @@ class BallDetector(Node):
             cv2.waitKey(1)
 
     def initialize_parameters(self):
-        # Declare and read parameters from aruco_params.yaml
+        # Declare and read parameters from config/camera.yaml
         self.declare_parameter(
             name="rgb_topic",
             value="/camera/color/image_raw",
@@ -234,7 +231,7 @@ class BallDetector(Node):
             ),
         )
 
-        # read parameters from config/params.yaml and store them
+        # read parameters from config/camera.yaml and store them
         self.rgb_topic = (
             self.get_parameter("rgb_topic").get_parameter_value().string_value
         )

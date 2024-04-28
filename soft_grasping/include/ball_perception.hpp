@@ -29,12 +29,13 @@ class BallPerception : public rclcpp::Node {
 public:
 	/**
 	 * @brief struct to define the color mask for filtering pointcloud by color
-	 * the color mask defines the minimum and maximum color values for red, green and blue channels
+	 * the color mask defines the minimum and maximum color values for hue, saturation and value in the HSV color space
+	 * hue range is [0,179], saturation range is [0,255], and value range is [0,255].
 	 */
 	struct color_mask {
-		float min_hue, max_hue;
-		float min_saturation, max_saturation;
-		float min_value, max_value;
+		uint8_t min_hue, max_hue;
+		uint8_t min_saturation, max_saturation;
+		uint8_t min_value, max_value;
 	};
 
 	// object detection struct: bounding box coordinates, class label, confidence score
@@ -42,6 +43,7 @@ public:
 		uint16_t x_min, y_min, width, height; // absolute pixel coordinates
 		uint16_t label;						  // class label of the detected object
 		float score;						  // confidence score of the detected object
+		rclcpp::Time timestamp;				  // header timestamp of the object detection message
 	};
 
 	// class mapping for object detection labels
@@ -270,26 +272,22 @@ private:
 	// red ball color mask using HSV color space
 	const color_mask red_ball_mask = {
 		// min_hue, max_hue, min_saturation, max_saturation, min_value, max_value
-		0, 10, 100, 255, 100, 255
-	};
+		0, 20, 0, 255, 0, 255};
 
 	// green ball color mask using HSV color space
 	const color_mask green_ball_mask = {
 		// min_hue, max_hue, min_saturation, max_saturation, min_value, max_value
-		50, 80, 100, 255, 100, 255
-	};
+		50, 80, 0, 255, 0, 255};
 
 	// blue ball color mask using HSV color space
 	const color_mask blue_ball_mask = {
 		// min_hue, max_hue, min_saturation, max_saturation, min_value, max_value
-		100, 130, 100, 255, 100, 255
-	};
+		100, 130, 0, 255, 0, 255};
 
 	// yellow ball color mask using HSV color space
 	const color_mask yellow_ball_mask = {
 		// min_hue, max_hue, min_saturation, max_saturation, min_value, max_value
-		20, 40, 100, 255, 100, 255
-	};
+		20, 40, 0, 255, 0, 255};
 };
 
 #endif // BALL_PERCEPTION_HPP

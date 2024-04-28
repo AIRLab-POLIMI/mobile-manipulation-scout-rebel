@@ -6,6 +6,7 @@
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/ModelCoefficients.h>
+#include <pcl/common/centroid.h>
 
 // MoveIt2 custom APIs
 #include "ball_perception.hpp"

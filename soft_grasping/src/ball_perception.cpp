@@ -36,7 +36,7 @@ BallPerception::BallPerception(std::shared_ptr<MoveIt2APIs> moveit2_api, const r
 	//	pointcloud_topic, 10, std::bind(&BallPerception::pointcloud_callback, this, std::placeholders::_1));
 
 	// initialize the pointcloud publisher
-	//pointcloud_filtered_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic_filtered, 10);
+	// pointcloud_filtered_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic_filtered, 10);
 
 	// initialize the saved images matrices
 	rgb_image = std::make_shared<cv::Mat>();
@@ -225,14 +225,14 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr BallPerception::computePointCloud(int x, 
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr pointcloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pointcloud->width = width;
 	pointcloud->height = height;
-	pointcloud->is_dense = false;
+	pointcloud->is_dense = true;
 	pointcloud->points.resize(pointcloud->width * pointcloud->height);
 
 	// fill the pointcloud with the depth map values
 	for (int i = 0; i < width; i++) {
 		for (int j = 0; j < height; j++) {
 			// compute the 3D point in the camera frame, from the pixel coordinates x+i, y+j
-			float depth = (float)depth_map_saved->at<uint16_t>(y+j, x+i) * depth_scale;
+			float depth = (float)depth_map_saved->at<uint16_t>(y + j, x + i) * depth_scale;
 
 			// fill the pointcloud with the 3D point and color information
 			pcl::PointXYZRGB point;
@@ -260,13 +260,12 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::generateSegmentedPointCloud(
 	// create pointcloud data from the bounding box coordinates and the depth map
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr detected_points = computePointCloud(detected.x_min, detected.y_min,
 																			   detected.width, detected.height);
-
 	RCLCPP_INFO(logger_, "Detected points size: %ld", detected_points->size());
 
-	// filter the points by distance
+	// filter the points by distance, selecting only the valid points within the specified distance
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr detected_points_filtered = filterPointCloudByDistance(detected_points, max_distance);
 
-	int detected_points_filtered_size = detected_points_filtered->size();
+	long detected_points_filtered_size = detected_points_filtered->size();
 	RCLCPP_INFO(logger_, "Filtered points size: %ld", detected_points_filtered_size);
 	if (detected_points_filtered_size == 0) {
 		RCLCPP_INFO(logger_, "Not enough points in the pointcloud");
@@ -276,9 +275,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::generateSegmentedPointCloud(
 	// segment the pointcloud data by applying a color mask filter defined by the class label
 	color_mask color_mask = getColorMask(detected.label);
 
-	// filter the pointcloud data by color
+	// filter the pointcloud data by color by applying the color mask
 	pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_points = filterPointCloudByColor(detected_points_filtered, color_mask);
-
 	RCLCPP_INFO(logger_, "Segmented points size: %ld", segmented_points->size());
 
 	return segmented_points;
@@ -320,8 +318,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudByDistance(p
 	pcl::PassThrough<pcl::PointXYZ> pass;
 	pass.setInputCloud(input_cloud);
 	pass.setFilterFieldName("z");
-	pass.setFilterLimits(0.001, max_distance); // Keep points with z between 0 and max_distance
-	// pass.setNegative (false); // Optional: keep points outside the range
+	pass.setFilterLimits(0.1, max_distance); // Keep points with z between 0 and max_distance
+	pass.setNegative(false);				 // Optional: keep points outside the range
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pass.filter(*filtered_cloud);
@@ -342,8 +340,8 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr BallPerception::filterPointCloudByDistanc
 	pcl::PassThrough<pcl::PointXYZRGB> pass;
 	pass.setInputCloud(input_cloud);
 	pass.setFilterFieldName("z");
-	pass.setFilterLimits(0.001, max_distance); // Keep points with z between 0 and max_distance
-	pass.setNegative(false);	   // Optional: keep points outside the range
+	pass.setFilterLimits(0.1, max_distance); // Keep points with z between 0 and max_distance
+	pass.setNegative(false);				 // Optional: keep points outside the range
 
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pass.filter(*filtered_cloud);
@@ -361,53 +359,68 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr BallPerception::filterPointCloudByDistanc
 pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudByColor(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_cloud,
 																			color_mask color_mask) {
 
-	// Create a condition function for color masking that returns the following value
-	// for each point in the point cloud using CondiionBase functions
+	// create a filtered pointcloud where the points are converted from RGB to HSV using openCV library
+	// then apply the given mask filter using this function as an example
 	// return (point.r >= color_mask.min_red && point.r <= color_mask.max_red) &&
 	//	      (point.g >= color_mask.min_green && point.g <= color_mask.max_green) &&
 	//	      (point.b >= color_mask.min_blue && point.b <= color_mask.max_blue);
 
-	// convert the pointcloud from pcl::PointXYZRGB to pcl::PointXYZHSV
-	pcl::PointCloud<pcl::PointXYZHSV>::Ptr cloud_hsv(new pcl::PointCloud<pcl::PointXYZHSV>);
-	pcl::PointCloudXYZRGBtoXYZHSV(*input_cloud, *cloud_hsv);
-
-	// Create the condition
-	pcl::ConditionAnd<pcl::PointXYZHSV>::Ptr color_condition(new pcl::ConditionAnd<pcl::PointXYZHSV>());
-	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("h", pcl::ComparisonOps::GT, color_mask.min_hue)));
-	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("h", pcl::ComparisonOps::LT, color_mask.max_hue)));
-	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("s", pcl::ComparisonOps::GT, color_mask.min_saturation)));
-	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("s", pcl::ComparisonOps::LT, color_mask.max_saturation)));
-	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("v", pcl::ComparisonOps::GT, color_mask.min_value)));
-	color_condition->addComparison(pcl::FieldComparison<pcl::PointXYZHSV>::ConstPtr(
-		new pcl::FieldComparison<pcl::PointXYZHSV>("v", pcl::ComparisonOps::LT, color_mask.max_value)));
-
-	// Create the filtering object
-	pcl::ConditionalRemoval<pcl::PointXYZHSV> condrem;
-	condrem.setInputCloud(cloud_hsv);
-	condrem.setCondition(color_condition);
-	condrem.setKeepOrganized(false); // Optional: maintain point order
-
-	pcl::PointCloud<pcl::PointXYZHSV>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZHSV>);
-	condrem.filter(*filtered_cloud);
-
-	// Convert the pointcloud to a pointcloud without color information
-	pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud_no_color(new pcl::PointCloud<pcl::PointXYZ>);
-	filtered_cloud_no_color->width = filtered_cloud->width;
-	filtered_cloud_no_color->height = filtered_cloud->height;
-	filtered_cloud_no_color->is_dense = false;
-	filtered_cloud_no_color->points.resize(filtered_cloud_no_color->width * filtered_cloud_no_color->height);
-
-	for (unsigned int i = 0; i < filtered_cloud->size(); ++i) {
-		filtered_cloud_no_color->points[i].x = filtered_cloud->points[i].x;
-		filtered_cloud_no_color->points[i].y = filtered_cloud->points[i].y;
-		filtered_cloud_no_color->points[i].z = filtered_cloud->points[i].z;
+	// create a openCV matrix having as rows the rgb values normalized of the input pointcloud
+	cv::Mat rgb_values(input_cloud->size(), 1, CV_8UC3);
+	for (unsigned int i = 0; i < input_cloud->size(); ++i) {
+		rgb_values.at<cv::Vec3b>(i, 0)[0] = input_cloud->points[i].r;
+		rgb_values.at<cv::Vec3b>(i, 0)[1] = input_cloud->points[i].g;
+		rgb_values.at<cv::Vec3b>(i, 0)[2] = input_cloud->points[i].b;
 	}
-	return filtered_cloud_no_color;
+	// convert the RGB values to HSV values
+	cv::Mat hsv_values;
+	cv::cvtColor(rgb_values, hsv_values, cv::COLOR_RGB2HSV);
+
+	// create a vector of indices of the points that are within the color mask range
+	std::vector<int> indices_to_keep;
+	for (int i = 0; i < hsv_values.rows; ++i) {
+		cv::Vec3b &hsv = hsv_values.at<cv::Vec3b>(i, 0);
+		if ((hsv[0] >= color_mask.min_hue && hsv[0] <= color_mask.max_hue) &&
+			(hsv[1] >= color_mask.min_saturation && hsv[1] <= color_mask.max_saturation) &&
+			(hsv[2] >= color_mask.min_value && hsv[2] <= color_mask.max_value)) {
+			indices_to_keep.push_back(i);
+		}
+	}
+
+	// create a new pointcloud with the points that are within the color mask range
+	pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	filtered_cloud->width = indices_to_keep.size();
+	filtered_cloud->height = 1;
+	filtered_cloud->is_dense = false;
+	filtered_cloud->points.resize(filtered_cloud->width * filtered_cloud->height);
+
+	for (unsigned int i = 0; i < indices_to_keep.size(); ++i) {
+		filtered_cloud->points[i].x = input_cloud->points[indices_to_keep[i]].x;
+		filtered_cloud->points[i].y = input_cloud->points[indices_to_keep[i]].y;
+		filtered_cloud->points[i].z = input_cloud->points[indices_to_keep[i]].z;
+	}
+
+	return filtered_cloud;
+}
+
+/**
+ * @brief given a label integer, it returns the corresponding color mask for the object detection class label
+ * @param label the class label integer
+ * @return the color mask for the object detection class label
+ */
+BallPerception::color_mask BallPerception::getColorMask(uint16_t label) {
+	switch (label) {
+	case 0: // blue
+		return blue_ball_mask;
+	case 1: // green
+		return green_ball_mask;
+	case 2: // red
+		return red_ball_mask;
+	case 3: // yellow
+		return yellow_ball_mask;
+	default:
+		return blue_ball_mask; // never called
+	}
 }
 
 /**
@@ -460,26 +473,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudBySphere(pcl
 	extract.filter(*filtered_cloud);
 
 	return filtered_cloud;
-}
-
-/**
- * @brief given a label integer, it returns the corresponding color mask for the object detection class label
- * @param label the class label integer
- * @return the color mask for the object detection class label
- */
-BallPerception::color_mask BallPerception::getColorMask(uint16_t label) {
-	switch (label) {
-	case 0: // blue
-		return blue_ball_mask;
-	case 1: // green
-		return green_ball_mask;
-	case 2: // red
-		return red_ball_mask;
-	case 3: // yellow
-		return yellow_ball_mask;
-	default:
-		return blue_ball_mask; // never called
-	}
 }
 
 /**
