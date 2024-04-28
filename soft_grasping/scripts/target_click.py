@@ -82,7 +82,7 @@ class TargetClick(Node):
             self.target_pub.publish(ObjectCoords(x=x, y=y))
 
     def initialize_parameters(self):
-        # Declare and read parameters from aruco_params.yaml
+        # Declare and read parameters from config/camera.yaml
         self.declare_parameter(
             name="rgb_topic",
             value="/camera/color/image_raw",
@@ -92,7 +92,7 @@ class TargetClick(Node):
             ),
         )
 
-        # read parameters from config/params.yaml and store them
+        # read parameters from config/camera.yaml and store them
         self.rgb_topic = (
             self.get_parameter("rgb_topic").get_parameter_value().string_value
         )

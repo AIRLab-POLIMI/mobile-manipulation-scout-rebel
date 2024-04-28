@@ -23,7 +23,7 @@ def generate_launch_description():
     camera_params_file = os.path.join(
         get_package_share_directory('soft_grasping'),
         'config',
-        'params.yaml'
+        'camera.yaml'
     )
 
     with open(camera_params_file, 'r') as file:
