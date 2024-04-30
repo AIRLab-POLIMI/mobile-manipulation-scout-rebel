@@ -18,6 +18,7 @@
 
 // MoveIt2 imports
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/kinematic_constraints/utils.h>
 #include <moveit/planning_interface/planning_interface.h>
 #include <moveit/planning_pipeline/planning_pipeline.h>
 #include <moveit/planning_scene/planning_scene.h>

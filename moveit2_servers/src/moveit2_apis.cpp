@@ -125,11 +125,17 @@ void MoveIt2APIs::loadPlanner(const moveit::core::RobotModelPtr &robot_model) {
 
 	std::string planner_plugin_name;
 
+	bool loaded = moveit2_node_->get_parameter("planning_plugin", planner_plugin_name);
+
 	// We will get the name of planning plugin we want to load
 	// from the ROS parameter server, and then load the planner
 	// making sure to catch all exceptions.
-	if (!moveit2_node_->get_parameter("planning_plugin", planner_plugin_name))
+	if (!loaded) {
 		RCLCPP_FATAL(LOGGER, "Could not find planner plugin name");
+	} else {
+		RCLCPP_INFO(LOGGER, "Found planner plugin name: %s", planner_plugin_name.c_str());
+	}
+
 	try {
 		planner_plugin_loader.reset(new pluginlib::ClassLoader<planning_interface::PlannerManager>(
 			"moveit_core", "planning_interface::PlannerManager"));
@@ -137,7 +143,7 @@ void MoveIt2APIs::loadPlanner(const moveit::core::RobotModelPtr &robot_model) {
 		RCLCPP_FATAL(LOGGER, "Exception while creating planning plugin loader %s", ex.what());
 	}
 	try {
-		planner_instance.reset(planner_plugin_loader->createUnmanagedInstance(planner_plugin_name));
+		planner_instance.reset(planner_plugin_loader->createUnmanagedInstance("stomp_moveit/StompPlanner"));
 		if (!planner_instance->initialize(robot_model, moveit2_node_, moveit2_node_->get_namespace())) {
 			RCLCPP_FATAL(LOGGER, "Could not initialize planner instance");
 		}
@@ -449,23 +455,26 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
 	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
 	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
 	move_group->setPoseTarget(*compensated_target_pose, end_effector_link);
-	move_group->setPlannerId("RRTConnectkConfigDefault");
+
+	//move_group->setPlanningPipelineId("ompl");
+	//move_group->setPlannerId("RRTConnectkConfigDefault");
+	move_group->setPlanningPipelineId("stomp");
+	move_group->setPlannerId("STOMP");
 	move_group->setPlanningTime(timeout_seconds);
 
 	// optionally limit accelerations and velocity scaling
 	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_cartesian_space);
 	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
-
+	
 	/*
 	if (planar_movement) {
+		move_group->clearPathConstraints();
 		move_group->setPathConstraints(addLinearPathConstraints(target_pose));
 	}
 	*/
-
-	move_group->clearPathConstraints();
-
 	// create plan for reaching the goal pose
 	// make several attempts at planning until a valid motion is found or the maximum number of retries is reached
+	
 	int attempt = 0;
 	bool valid_motion = false;
 	moveit::planning_interface::MoveGroupInterface::Plan plan_motion;
@@ -487,6 +496,7 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
 	visual_tools->publishTrajectoryLine(plan_motion.trajectory, link_eef, joint_model_group);
 	visual_tools->trigger();
 
+	
 	if (bool(response)) { // if the plan was successful
 		RCLCPP_INFO(LOGGER, "moving the robot with cartesian space goal");
 		move_group->execute(plan_motion);
@@ -509,7 +519,8 @@ double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_
 	move_group->setStartState(*move_group->getCurrentState());
 	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
 	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
-	move_group->setPlannerId("RRTConnectkConfigDefault");
+	move_group->setPlanningPipelineId("pilz_industrial_motion_planner");
+	move_group->setPlannerId("LIN");
 	move_group->setPlanningTime(timeout_seconds);
 
 	// optionally limit accelerations and velocity scaling
@@ -538,6 +549,10 @@ double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_
 		if (completed_proportion_temp > completed_proportion) {
 			completed_proportion = completed_proportion_temp;
 			cartesian_trajectory = cartesian_trajectory_temp;
+		}
+
+		if (completed_proportion_temp < 1.0) {
+			move_group->setPlannerId("PTP");
 		}
 
 		attempt++;
@@ -580,7 +595,11 @@ bool MoveIt2APIs::robotPlanAndMove(std::vector<double> joint_space_goal) {
 	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
 	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
 	move_group->setPlanningTime(timeout_seconds);
-	// optionally limit accelerations and velocity scaling
+	// move_group->setPlanningPipelineId("ompl");
+	// move_group->setPlannerId("RRTConnectkConfigDefault");
+	move_group->setPlanningPipelineId("stomp");
+	move_group->setPlannerId("STOMP");
+	//  optionally limit accelerations and velocity scaling
 	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_joint_space);
 	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
 

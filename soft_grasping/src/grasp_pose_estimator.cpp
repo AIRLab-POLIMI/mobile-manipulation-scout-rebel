@@ -325,7 +325,7 @@ geometry_msgs::msg::PoseStamped GraspPoseEstimator::chooseGraspingPose(std::vect
 	// choose the most suitable grasping pose among the sampling poses
 	geometry_msgs::msg::PoseStamped grasp_pose;
 	// choose middle pose
-	grasp_pose = poses[poses.size() / 2];
+	grasp_pose = poses[poses.size() * 1 / 4];
 	return grasp_pose;
 }
 

@@ -124,6 +124,7 @@ def generate_launch_description():
             "camera_frame": LaunchConfiguration('camera_rgb_frame'),
             "load_base": LaunchConfiguration("load_base"),
             # parameters for the grasping pose estimator node
+            'rgb_topic': LaunchConfiguration('rgb_topic'),
             'pointcloud_topic': LaunchConfiguration('pointcloud_topic'),
             'depth_topic': LaunchConfiguration('depth_topic'),
             'camera_info_topic': LaunchConfiguration('camera_info_topic'),

@@ -114,7 +114,7 @@ void GraspAutonomous::mainThreadWithObjectDetections() {
 		RCLCPP_INFO(logger_, "Estimated object center point");
 
 		// estimate the grasp pose from the object surface point
-		/*
+		
 		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose =
 			std::make_shared<geometry_msgs::msg::PoseStamped>(grasp_pose_estimator->estimateGraspingPose(p_center));
 
@@ -130,7 +130,7 @@ void GraspAutonomous::mainThreadWithObjectDetections() {
 		RCLCPP_INFO(logger_, "Executing demo");
 
 		grasp_pose_estimator->executeDemo(grasp_pose);
-		*/
+		
 		rate.sleep();
 	}
 }
