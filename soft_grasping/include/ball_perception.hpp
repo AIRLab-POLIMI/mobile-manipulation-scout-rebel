@@ -8,7 +8,6 @@
 
 // pointcloud library
 #include <pcl/common/transforms.h>
-#include <pcl/filters/conditional_removal.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/kdtree/kdtree_flann.h>

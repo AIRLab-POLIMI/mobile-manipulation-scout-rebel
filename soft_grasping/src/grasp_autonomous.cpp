@@ -82,55 +82,59 @@ void GraspAutonomous::mainThreadWithObjectDetections() {
 		RCLCPP_INFO(logger_, "Acquired object detections # %ld", object_detections_saved->size());
 
 		// save the depth map and use it to compute the pointcloud data
-		ball_perception->saveRGBDepth();
-
+		saveRGBandDepthData();
 		RCLCPP_INFO(logger_, "Saved RGB and depth data");
 
 		// select the object detection with the highest confidence score and closest to the camera
 		std::shared_ptr<BallPerception::ObjectDetection> obj_selected = std::make_shared<BallPerception::ObjectDetection>();
 		pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pointcloud;
-		selectObjectPointcloud(obj_selected, segmented_pointcloud);
-
-		RCLCPP_INFO(logger_, "Selected object detection");
+		bool valid_selection = selectObjectPointcloud(obj_selected, segmented_pointcloud);
 
 		// if no object detection is selected, wait for new input
-		if (segmented_pointcloud == nullptr) {
+		if (!valid_selection) {
 			RCLCPP_INFO(logger_, "Failed to select object detection");
-			continue;
-		}
-		if (segmented_pointcloud->size() == 0) {
-			RCLCPP_INFO(logger_, "Failed to select object detection");
-			continue;
-		}
-
-		// from the filtered and segmented pointcloud, estimate the point on the object surface
-		geometry_msgs::msg::Point p_center = estimateSphereCenterFromSurfacePointcloud(segmented_pointcloud);
-		if (p_center.x == 0.0 && p_center.y == 0.0 && p_center.z == 0.0) {
 			rate.sleep();
 			continue;
 		}
-		grasp_pose_estimator->visualizePoint(p_center, rviz_visual_tools::ORANGE);
+		RCLCPP_INFO(logger_, "Selected object detection");
 
-		RCLCPP_INFO(logger_, "Estimated object center point");
-
-		// estimate the grasp pose from the object surface point
-		
-		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose =
-			std::make_shared<geometry_msgs::msg::PoseStamped>(grasp_pose_estimator->estimateGraspingPose(p_center));
-
-		RCLCPP_INFO(logger_, "Estimated grasp pose");
-
-		// empty grasp pose, wait for new input
-		if (grasp_pose->pose.position.x == 0 && grasp_pose->pose.position.y == 0 &&
-			grasp_pose->pose.position.z == 0) {
-			RCLCPP_ERROR(logger_, "Failed to estimate feasible grasping pose");
+		// from the filtered and segmented pointcloud, estimate the point on the object surface
+		geometry_msgs::msg::Point p_center;
+		bool valid_center = estimateSphereCenterFromSurfacePointcloud(segmented_pointcloud, p_center);
+		if (!valid_center) {
+			rate.sleep();
 			continue;
 		}
 
-		RCLCPP_INFO(logger_, "Executing demo");
+		RCLCPP_INFO(logger_, "Estimated object center point");
+		grasp_pose_estimator->visualizePoint(p_center, rviz_visual_tools::ORANGE);
 
-		grasp_pose_estimator->executeDemo(grasp_pose);
-		
+		// estimate the grasp pose from the object surface point
+		geometry_msgs::msg::PoseStamped grasp_pose;
+		bool valid_grasp = grasp_pose_estimator->estimateGraspingPose(p_center, grasp_pose);
+
+		// empty grasp pose, wait for new input
+		if (!valid_grasp) {
+			RCLCPP_ERROR(logger_, "Failed to estimate feasible grasping pose");
+			continue;
+		}
+		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose_ptr =
+			std::make_shared<geometry_msgs::msg::PoseStamped>(grasp_pose);
+		RCLCPP_INFO(logger_, "Estimated grasp pose");
+
+		RCLCPP_INFO(logger_, "Executing demo");
+		bool completed_grasping = grasp_pose_estimator->executeDemo(grasp_pose_ptr);
+		if (!completed_grasping) {
+			RCLCPP_ERROR(logger_, "Failed to complete the grasping demo");
+		} else {
+			// move back to the ready pose
+			grasp_pose_estimator->moveToReadyPose();
+			// drop the ball to the container: release then turn off the pump
+			grasp_pose_estimator->dropBallToContainer();
+			// move back to the ready pose, ready for the next ball
+			grasp_pose_estimator->moveToReadyPose();
+		}
+
 		rate.sleep();
 	}
 }
@@ -163,19 +167,28 @@ bool GraspAutonomous::acquireObjectDetections() {
 }
 
 /**
+ * @brief save RGB and depth data from the ball perception node
+ */
+void GraspAutonomous::saveRGBandDepthData() {
+	ball_perception->saveRGBDepth();
+}
+
+/**
  * @brief Select the object detected from the list of saved object detections and saved depth map
  *  The choice is based on the object detection class label confidence score
  *  and the shortest distance from the camera to the center of the object bounding box
  * @param object_selected the selected object detection to be returned by reference
  * @param segmented_pointcloud the segmented pointcloud data of the selected object detection to be returned by reference
- * @return void; the selected object detection with relative pointcloud is passed by reference
+ * @return bool: the selected object detection with relative pointcloud is returned with the given reference address
+ * 		true if the object is selected successfully, false if no object is selected
  */
-void GraspAutonomous::selectObjectPointcloud(
+bool GraspAutonomous::selectObjectPointcloud(
 	std::shared_ptr<BallPerception::ObjectDetection> &object_selected,
 	pcl::PointCloud<pcl::PointXYZ>::Ptr &segmented_pointcloud) {
 
 	BallPerception::ObjectDetection obj_selected;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pcl_selected = nullptr;
+	bool valid_selection = false;
 
 	// select the object detection with the highest confidence score and closer to the camera
 	float max_distance = 1.5, min_distance = max_distance; // set a maximum distance to the camera in meters
@@ -227,22 +240,25 @@ void GraspAutonomous::selectObjectPointcloud(
 			segmented_pcl_selected = segmented_pcl;
 			RCLCPP_INFO(logger_, "Selected object: label %d, confidence: %f, score: %f",
 						obj_selected.label, obj_selected.score, score_max);
+			valid_selection = true;
 		}
 	}
 
 	// save the selected object detection and segmented pointcloud to the input parameters passed by reference
 	*object_selected = obj_selected;
 	segmented_pointcloud = segmented_pcl_selected;
+	return valid_selection;
 }
 
 /**
  * @brief estimate the center point of the sphere with known radius from the segmented pointcloud data,
  *  by trying to fit the points to a sphere model using RANSAC algorithm
  * @param pcl::PointCloud<pcl::PointXYZ>::Ptr the segmented pointcloud data
- * @return geometry_msgs::msg::Point the estimated center point of the sphere
+ * @param sphere_center Point: the estimated center point of the sphere passed by reference
+ * @return bool: true if the sphere center is estimated successfully, false if not
  */
-geometry_msgs::msg::Point GraspAutonomous::estimateSphereCenterFromSurfacePointcloud(
-	pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pointcloud) {
+bool GraspAutonomous::estimateSphereCenterFromSurfacePointcloud(pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pointcloud,
+																geometry_msgs::msg::Point &sphere_center) {
 	// use pcl SACSegmentation to fit the points to a sphere model using RANSAC algorithm
 	pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
 	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
@@ -259,7 +275,7 @@ geometry_msgs::msg::Point GraspAutonomous::estimateSphereCenterFromSurfacePointc
 	// if no inliers are found, return the origin point
 	if (inliers->indices.size() == 0) {
 		RCLCPP_ERROR(logger_, "Failed to estimate sphere center from pointcloud");
-		return geometry_msgs::msg::Point();
+		return false;
 	}
 
 	// return the estimated center point of the sphere
@@ -267,5 +283,6 @@ geometry_msgs::msg::Point GraspAutonomous::estimateSphereCenterFromSurfacePointc
 	p_center.x = coefficients->values[0];
 	p_center.y = coefficients->values[1];
 	p_center.z = coefficients->values[2];
-	return p_center;
+	sphere_center = p_center;
+	return true;
 }

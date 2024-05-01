@@ -3,7 +3,6 @@
 
 // MoveIt2 custom APIs
 #include "grasp_pose_estimator.hpp"
-#include "moveit2_apis.hpp"
 
 // custom ros2 interfaces
 #include "mobile_manipulation_interfaces/msg/object_coords.hpp"

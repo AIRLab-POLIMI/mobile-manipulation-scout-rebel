@@ -1,0 +1,8 @@
+# dropping object: request
+# empty request: move robot to static pose then drop the ball and park itself
+---
+# dropping: response
+# empty response, just confirm when it finished
+---
+# dropping: feedback
+string status # text feedback about ongoing proces

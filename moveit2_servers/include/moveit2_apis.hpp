@@ -34,6 +34,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <array>
 
 // custom service for the soft gripper pneumatic pump actuation
 #include "igus_rebel_gripper_controller/srv/gripper_actuation.hpp"
@@ -58,7 +59,7 @@ private:
 	// load base arg
 	bool load_base_arg;
 	// vector of double values for the joint position of the parked group state value
-	std::vector<double> parked_joint_positions;
+	std::array<double, 6> parked_joint_positions;
 
 	// tf2 listener and buffer for frame transformations
 	std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
@@ -213,7 +214,7 @@ public:
 	 * @param joint_space_goal the joint space goal, sequence of 6 joint values expressed in radians
 	 * @return true if plan and movement were successful, false otherwise
 	 */
-	bool robotPlanAndMove(std::vector<double> joint_space_goal);
+	bool robotPlanAndMove(std::array<double, 6> joint_space_goal);
 
 	/**
 	 * @brief add position and orientation constraints to the planning, so to produce a linear path
@@ -256,7 +257,7 @@ public:
 	 * @brief getter for parked_joint_positions
 	 * @return the default parked joint positions
 	 */
-	std::vector<double> getParkedJointPositions(void);
+	std::array<double, 6> getParkedJointPositions(void);
 
 	/**
 	 * @brief getter for the load_base_arg

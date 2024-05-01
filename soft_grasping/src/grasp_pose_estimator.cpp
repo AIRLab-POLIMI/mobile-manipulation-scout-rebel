@@ -35,7 +35,7 @@ void GraspPoseEstimator::setVisualTools(std::shared_ptr<moveit_visual_tools::Mov
  * @brief move to static ready position: joint space goal where to look for a ball to be picked up
  */
 void GraspPoseEstimator::moveToReadyPose() {
-	const std::vector<double> ready_pose = {M_PI / 3.0, -M_PI / 3.0, 90.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
+	const std::array<double, 6> ready_pose = {M_PI / 3.0, -M_PI / 3.0, 90.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
 	moveit2_api_->robotPlanAndMove(ready_pose);
 }
 
@@ -43,7 +43,7 @@ void GraspPoseEstimator::moveToReadyPose() {
  * @brief drop the picked ball in the container put aside to the mobile robot
  */
 void GraspPoseEstimator::dropBallToContainer() {
-	const std::vector<double> ready_pose = {150.0 * M_PI / 180.0, 40.0 * M_PI / 180.0, 50.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
+	const std::array<double, 6> ready_pose = {150.0 * M_PI / 180.0, 40.0 * M_PI / 180.0, 50.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
 	moveit2_api_->robotPlanAndMove(ready_pose);
 	moveit2_api_->pump_release();
 	moveit2_api_->pump_off();
@@ -52,8 +52,9 @@ void GraspPoseEstimator::dropBallToContainer() {
 /**
  * @brief demo execution
  * @param grasp_pose the grasp pose to execute
+ * @return true if the demo was executed successfully until the end, false otherwise
  */
-void GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose) {
+bool GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose) {
 	/* first version of the demo: reach directly the grasping pose and grip the ball
 	// first open with the gripper for picking up the ball
 	moveit2_api_->pump_release();
@@ -87,7 +88,7 @@ void GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr 
 	bool success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
 	if (!success) {
 		RCLCPP_ERROR(logger_, "Failed to move to the pre-grasping pose");
-		return;
+		return false;
 	}
 
 	// open the gripper for picking up the ball
@@ -108,7 +109,7 @@ void GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr 
 			moveit2_api_->pump_off();
 			moveToReadyPose();
 			// skip the rest of the loop
-			return;
+			return false;
 		}
 	}
 
@@ -125,23 +126,21 @@ void GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr 
 		success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
 		if (!success) {
 			RCLCPP_ERROR(logger_, "Failed to move back from the grasping pose directly");
+			return false;
 		}
 	}
 
-	// move back to the ready pose
-	moveToReadyPose();
-	// drop the ball to the container: release then turn off the pump
-	dropBallToContainer();
-	// move back to the ready pose, ready for the next ball
-	moveToReadyPose();
+	return true;
 }
 
 /**
  * @brief Estimates the grasp pose for the object at the given coordinates
  * @param ball_center estimated center of the ball, in the camera frame of reference
- * @return geometry_msgs::msg::PoseStamped estimated grasp pose
+ * @param grasp_pose the estimated grasp pose, to be returned, passed by reference
+ * @return true if the grasp pose was estimated successfully, false otherwise
  */
-geometry_msgs::msg::PoseStamped GraspPoseEstimator::estimateGraspingPose(geometry_msgs::msg::Point ball_center) {
+bool GraspPoseEstimator::estimateGraspingPose(geometry_msgs::msg::Point ball_center,
+											  geometry_msgs::msg::PoseStamped &grasp_pose) {
 
 	// compute the grasp pose from the center of the ball
 	auto grasp_sample_poses = generateSamplingGraspingPoses(ball_center);
@@ -151,13 +150,12 @@ geometry_msgs::msg::PoseStamped GraspPoseEstimator::estimateGraspingPose(geometr
 
 	if (grasp_sample_poses.empty()) {
 		RCLCPP_ERROR(logger_, "No grasping poses found");
-		geometry_msgs::msg::PoseStamped empty_pose;
-		return empty_pose;
+		return false;
 	}
 
 	// return a valid grasping pose
-	geometry_msgs::msg::PoseStamped grasp_pose = chooseGraspingPose(grasp_sample_poses);
-	return grasp_pose;
+	grasp_pose = chooseGraspingPose(grasp_sample_poses);
+	return true;
 }
 
 /**

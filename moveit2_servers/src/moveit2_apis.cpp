@@ -94,7 +94,7 @@ void MoveIt2APIs::initPlanner() {
 	// get the default parked group state joints values
 	std::map<std::string, double> group_state_map = std::map<std::string, double>();
 	joint_model_group->getVariableDefaultPositions("parked", group_state_map);
-	parked_joint_positions = std::vector<double>(group_state_map.size());
+	parked_joint_positions = std::array<double, 6>();
 	std::string joint_names_values = "Parked joint positions: ";
 	for (const auto &pair : group_state_map) {
 		// assumes that the joints are ordered in the same way as the move_group interface does
@@ -586,10 +586,11 @@ double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_
  * @param joint_space_goal the joint space goal, sequence of 6 joint values expressed in radians
  * @return true if plan and movement were successful, false otherwise
  */
-bool MoveIt2APIs::robotPlanAndMove(std::vector<double> joint_space_goal) {
+bool MoveIt2APIs::robotPlanAndMove(std::array<double, 6> joint_space_goal) {
 	// Setup a joint space goal
 	moveit::core::RobotState goal_state(*move_group->getCurrentState());
-	goal_state.setJointGroupPositions(joint_model_group, joint_space_goal);
+	std::vector<double> joint_space_goal_vector(joint_space_goal.begin(), joint_space_goal.end());
+	goal_state.setJointGroupPositions(joint_model_group, joint_space_goal_vector);
 
 	move_group->setStartState(*move_group->getCurrentState());
 	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
@@ -855,7 +856,7 @@ void MoveIt2APIs::removeCollisionWalls() {
  * @brief getter for parked_joint_positions
  * @return the default parked joint positions
  */
-std::vector<double> MoveIt2APIs::getParkedJointPositions(void) {
+std::array<double, 6> MoveIt2APIs::getParkedJointPositions(void) {
 	return this->parked_joint_positions;
 }
 

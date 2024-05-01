@@ -2,11 +2,11 @@
 #define GRASP_AUTONOMOUS_HPP
 
 // PCL library
-#include <pcl/segmentation/sac_segmentation.h>
-#include <pcl/sample_consensus/method_types.h>
-#include <pcl/sample_consensus/model_types.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/common/centroid.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
 
 // MoveIt2 custom APIs
 #include "ball_perception.hpp"
@@ -71,14 +71,20 @@ public:
 	bool acquireObjectDetections();
 
 	/**
+	 * @brief save RGB and depth data from the ball perception node
+	*/
+	void saveRGBandDepthData();
+
+	/**
 	 * @brief Select the object detected from the list of saved object detections and saved depth map
 	 *  The choice is based on the object detection class label confidence score
 	 *  and the shortest distance from the camera to the center of the object bounding box
 	 * @param object_selected the selected object detection to be returned by reference
 	 * @param segmented_pointcloud the segmented pointcloud data of the selected object detection to be returned by reference
-	 * @return void; the selected object detection with relative pointcloud is passed by reference
+	 * @return bool: the selected object detection with relative pointcloud is returned with the given reference address
+	 * 		true if the object is selected successfully, false if no object is selected
 	 */
-	void selectObjectPointcloud(
+	bool selectObjectPointcloud(
 		std::shared_ptr<BallPerception::ObjectDetection> &object_selected,
 		pcl::PointCloud<pcl::PointXYZ>::Ptr &segmented_pointcloud);
 
@@ -86,10 +92,11 @@ public:
 	 * @brief estimate the center point of the sphere with known radius from the segmented pointcloud data,
 	 *  by trying to fit the points to a sphere model using RANSAC algorithm
 	 * @param pcl::PointCloud<pcl::PointXYZ>::Ptr the segmented pointcloud data
-	 * @return geometry_msgs::msg::Point the estimated center point of the sphere
+	 * @param sphere_center Point: the estimated center point of the sphere passed by reference
+	 * @return bool: true if the sphere center is estimated successfully, false if not
 	 */
-	geometry_msgs::msg::Point estimateSphereCenterFromSurfacePointcloud(pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pointcloud);
-
+	bool estimateSphereCenterFromSurfacePointcloud(pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pointcloud,
+												   geometry_msgs::msg::Point &sphere_center);
 };
 
 #endif // GRASP_AUTONOMOUS_HPP

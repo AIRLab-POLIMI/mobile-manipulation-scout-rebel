@@ -67,7 +67,7 @@ private:
 
 	// robot arm joint values for the looking pose
 	// should be valid for both scenarios where igus is mounted on the mobile robot base or on a table
-	std::vector<double> search_joints_positions = {-0.5, -0.7, 1.5, 0.0, 1.35, 0.0}; // radians
+	std::array<double, 6> search_joints_positions = {-0.5, -0.7, 1.5, 0.0, 1.35, 0.0}; // radians
 
 	// multi aruco markers setup subscriber
 	rclcpp::Subscription<aruco_interfaces::msg::ArucoMarkers>::SharedPtr aruco_markers_plane_sub;
@@ -148,14 +148,14 @@ public:
 	 * @param look_nearby true if the aruco markers are nearby, false otherwise, changes the motion type
 	 * @return the array of waypoints to follow in joint space
 	 */
-	std::vector<std::vector<double>> computeSearchingWaypoints(bool look_nearby);
+	std::vector<std::array<double, 6>> computeSearchingWaypoints(bool look_nearby);
 
 	/**
 	 * @brief Compute the waypoints to follow in joint space, in order to look around for the aruco markers
 	 *  	The search is localized around the area where the button box is expected to be located
 	 * @return the array of waypoints to follow in joint space
 	 */
-	std::vector<std::vector<double>> computeLocalizedSearchingWaypoints();
+	std::vector<std::array<double, 6>> computeLocalizedSearchingWaypoints();
 
 	/**
 	 * @brief the looking pose: positioning along the x-axis such that the robot faces the buttons setup from a distance

@@ -1,7 +1,7 @@
-// Author: Simone Giampà
-// University: Politecnico di Milano
-// Master Degree: Computer Science Engineering
-// Laboratory: Artificial Intelligence and Robotics Laboratory (AIRLab)
+	// Author: Simone Giampà
+	// University: Politecnico di Milano
+	// Master Degree: Computer Science Engineering
+	// Laboratory: Artificial Intelligence and Robotics Laboratory (AIRLab)
 
 #include "button_presser_action_servers.hpp"
 
@@ -165,7 +165,7 @@ void ButtonPresserActionServers::lookNearbyForArucoMarkers(const std::shared_ptr
 	this->button_presser_api_->setReadyToPress(false);
 
 	// then create array of waypoints to follow in joint space, in order to look around for the aruco markers
-	std::vector<std::vector<double>> waypoints;
+	std::vector<std::array<double, 6>> waypoints;
 
 	if (localized_search) {
 		// localized search for aruco markers
@@ -414,7 +414,7 @@ void ButtonPresserActionServers::buttonPresserThread(const std::shared_ptr<GoalH
 geometry_msgs::msg::PoseStamped::SharedPtr ButtonPresserActionServers::lookFarForArucoMarkers(
 	const std::shared_ptr<GoalHandleButtonFind> goal_handle) {
 	// then create array of waypoints to follow in joint space, in order to look around for the aruco markers
-	std::vector<std::vector<double>> waypoints;
+	std::vector<std::array<double, 6>> waypoints;
 	waypoints = this->button_presser_api_->computeSearchingWaypoints(false);
 
 	// add the collision walls to the planning scene

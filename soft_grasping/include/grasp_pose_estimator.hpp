@@ -7,10 +7,6 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-
-// MoveIt2 includes
-#include <moveit_visual_tools/moveit_visual_tools.h>
 
 // C++ includes
 #include <Eigen/Dense>
@@ -56,8 +52,9 @@ public:
 	/**
 	 * @brief demo execution
 	 * @param grasp_pose the grasp pose to execute
+	 * @return true if the demo was executed successfully until the end, false otherwise
 	 */
-	void executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose);
+	bool executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose);
 
 	/**
 	 * @brief move to static ready position: joint space goal where to look for a ball to be picked up
@@ -72,9 +69,11 @@ public:
 	/**
 	 * @brief Estimates the grasp pose for the object at the given coordinates
 	 * @param ball_center estimated center of the ball, in the camera frame of reference
-	 * @return geometry_msgs::msg::PoseStamped estimated grasp pose
+	 * @param grasp_pose the estimated grasp pose, to be returned, passed by reference
+	 * @return true if the grasp pose was estimated successfully, false otherwise
 	 */
-	geometry_msgs::msg::PoseStamped estimateGraspingPose(geometry_msgs::msg::Point ball_center);
+	bool estimateGraspingPose(geometry_msgs::msg::Point ball_center,
+							  geometry_msgs::msg::PoseStamped &grasp_pose);
 
 	/**
 	 * @brief Computes the center of the ball given the closest point to the camera

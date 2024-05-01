@@ -8,7 +8,8 @@ if(NOT CMAKE_CXX_STANDARD)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-	add_compile_options(-Wall -Wextra -Wpedantic)
+	add_compile_options(-Wall -Wextra -Wpedantic -flto)
+	add_link_options(-flto)
 endif()
 
 # Find dependencies for C++ and Python
@@ -18,8 +19,6 @@ find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(tf2_geometry_msgs REQUIRED)
-find_package(tf2_kdl REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_kinematics REQUIRED)
@@ -28,7 +27,6 @@ find_package(moveit_visual_tools REQUIRED)
 find_package(mobile_manipulation_interfaces REQUIRED)
 find_package(igus_rebel_gripper_controller REQUIRED)
 find_package(moveit2_servers REQUIRED)
-find_package(image_transport REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -36,7 +34,7 @@ find_package(PCL REQUIRED)
 find_package(pcl_msgs REQUIRED)
 
 # ----------------------- C++ -----------------------
-include_directories(include ${OpenCV_INCLUDE_DIRS})
+include_directories(include )
 
 # ---------------------------------------------------------------
 # DEMO 1: Grasp with input click (click on the object to grasp)
@@ -50,17 +48,9 @@ add_executable(grasp_with_input_click
 )
 ament_target_dependencies(grasp_with_input_click
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
-	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs tf2_kdl
+	std_msgs geometry_msgs 
 	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_servers
 	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
-target_link_libraries(grasp_with_input_click
-	${OpenCV_LIBS}
-	${PCL_LIBRARIES}
-)
-install(TARGETS
-	grasp_with_input_click
-	DESTINATION lib/${PROJECT_NAME}
-)
 
 # ---------------------------------------------------------------
 # DEMO 2: Grasp autonomously with object detection pipeline
@@ -73,15 +63,32 @@ add_executable(grasp_autonomous
 )
 ament_target_dependencies(grasp_autonomous
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
-	std_msgs geometry_msgs tf2_ros tf2_eigen tf2_geometry_msgs tf2_kdl
+	std_msgs geometry_msgs 
 	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_servers
 	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
-target_link_libraries(grasp_autonomous
-	${OpenCV_LIBS}
-	${PCL_LIBRARIES}
+
+
+# ---------------------------------------------------------------
+# DEMO 3: Grasp autonomously with picking and dropping action servers
+# ---------------------------------------------------------------
+add_executable(grasp_action_servers
+	src/grasp_action_servers.cpp
+	src/grasp_pose_estimator.cpp
+	src/ball_perception.cpp
+	src/grasp_autonomous.cpp
 )
+ament_target_dependencies(grasp_action_servers
+	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
+	std_msgs geometry_msgs 
+	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_servers
+	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
+
+# ---------------------------------------------------------------
+
 install(TARGETS
+	grasp_action_servers
 	grasp_autonomous
+	grasp_with_input_click
 	DESTINATION lib/${PROJECT_NAME}
 )
 

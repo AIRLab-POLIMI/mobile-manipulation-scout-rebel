@@ -136,7 +136,7 @@ private:
 	std::shared_ptr<MoveIt2APIs> moveit2_api_;
 
 	// last searching waypoint pose
-	std::vector<double> last_searched_pose;
+	std::array<double, 6> last_searched_pose;
 
 	const bool localized_search = true;
 

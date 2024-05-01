@@ -67,18 +67,29 @@ void GraspWithClick::mainThreadWithCoordinates() {
 		// compute the center of the ball given the closest point to the camera
 		geometry_msgs::msg::Point ball_center = grasp_pose_estimator->computeBallCenter(p_closest);
 
-		// estimate grasp pose from the center of the ball
-		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose =
-			std::make_shared<geometry_msgs::msg::PoseStamped>(grasp_pose_estimator->estimateGraspingPose(ball_center));
+		// estimate the grasp pose from the object surface point
+		geometry_msgs::msg::PoseStamped grasp_pose;
+		bool valid_grasp = grasp_pose_estimator->estimateGraspingPose(ball_center, grasp_pose);
 
 		// empty grasp pose, wait for new input
-		if (grasp_pose->pose.position.x == 0 && grasp_pose->pose.position.y == 0 &&
-			grasp_pose->pose.position.z == 0) {
+		if (!valid_grasp) {
 			RCLCPP_ERROR(logger_, "Failed to estimate feasible grasping pose");
 			continue;
 		}
 
-		grasp_pose_estimator->executeDemo(grasp_pose);
+		geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose_ptr =
+			std::make_shared<geometry_msgs::msg::PoseStamped>(grasp_pose);
+		bool completed_grasping = grasp_pose_estimator->executeDemo(grasp_pose_ptr);
+		if (!completed_grasping) {
+			RCLCPP_ERROR(logger_, "Failed to complete the grasping demo");
+		} else {
+			// move back to the ready pose
+			grasp_pose_estimator->moveToReadyPose();
+			// drop the ball to the container: release then turn off the pump
+			grasp_pose_estimator->dropBallToContainer();
+			// move back to the ready pose, ready for the next ball
+			grasp_pose_estimator->moveToReadyPose();
+		}
 
 		rate.sleep();
 	}
