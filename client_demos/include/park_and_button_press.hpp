@@ -37,18 +37,18 @@ using GoalHandleButtonPresser = rclcpp_action::ClientGoalHandle<ButtonPresserAct
 using ButtonFinderAction = mobile_manipulation_interfaces::action::ButtonFind;
 using GoalHandleButtonFinder = rclcpp_action::ClientGoalHandle<ButtonFinderAction>;
 
-class ParkAndInteract : public rclcpp::Node {
+class ParkAndButtonPress : public rclcpp::Node {
 
 public:
 	/**
-	 * @brief Constructor for ParkAndInteract class
+	 * @brief Constructor for ParkAndButtonPress class
 	 * 		instantiates action client for parking and navigation action server
 	 * 		subscribes to /target_pose topic to receive goal pose from rviz2
 	 * 	    starts a thread to run main_thread function
 	 * 		instatiates action client for button press and button finder action servers
 	 * @param node_options options for the node, given by the launch file
 	 */
-	ParkAndInteract(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
+	ParkAndButtonPress(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 	/**
 	 * @brief Callback function for receiving target pose from /target_pose topic
@@ -176,7 +176,7 @@ private:
 	// action client for button finder action server
 	rclcpp_action::Client<ButtonFinderAction>::SharedPtr button_finder_action_client_;
 
-	rclcpp::Logger logger_ = rclcpp::get_logger("ParkAndInteract");
+	rclcpp::Logger logger_ = rclcpp::get_logger("ParkAndButtonPress");
 
 	// subscriber to /target_pose topic
 	rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_subscriber_;
@@ -194,4 +194,4 @@ private:
 
 } // namespace client_demos
 
-RCLCPP_COMPONENTS_REGISTER_NODE(client_demos::ParkAndInteract)
+RCLCPP_COMPONENTS_REGISTER_NODE(client_demos::ParkAndButtonPress)

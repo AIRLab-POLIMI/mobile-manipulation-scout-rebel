@@ -1,17 +1,17 @@
 
-#include "park_and_interact.hpp"
+#include "park_and_button_press.hpp"
 
 using namespace client_demos;
 
 /**
- * @brief Constructor for ParkAndInteract class
+ * @brief Constructor for ParkAndButtonPress class
  * 		instantiates action client for parking and navigation action server
  * 		subscribes to /target_pose topic to receive goal pose from rviz2
  * 	    starts a thread to run main_thread function
  * 		instatiates action client for button press and button finder action servers
  * @param node_options options for the node, given by the launch file
  */
-ParkAndInteract::ParkAndInteract(const rclcpp::NodeOptions &node_options) : Node("park_and_interact", node_options) {
+ParkAndButtonPress::ParkAndButtonPress(const rclcpp::NodeOptions &node_options) : Node("park_and_button_press", node_options) {
 	// Create action client for parking action server
 	this->parking_action_client_ = rclcpp_action::create_client<ParkingAction>(this, "robot_parking_action");
 	// Create action client for button press action server
@@ -21,7 +21,7 @@ ParkAndInteract::ParkAndInteract(const rclcpp::NodeOptions &node_options) : Node
 
 	// subscription to /target_pose posestamped topic to receive goal pose from rviz2
 	this->target_subscriber_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-		"/target_pose", 10, std::bind(&ParkAndInteract::target_callback, this, std::placeholders::_1));
+		"/target_pose", 10, std::bind(&ParkAndButtonPress::target_callback, this, std::placeholders::_1));
 
 	// publisher to /target_pose topic for visualization in rviz2 when target is computed by button finder
 	this->target_publisher_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/target_pose", 10);
@@ -30,7 +30,7 @@ ParkAndInteract::ParkAndInteract(const rclcpp::NodeOptions &node_options) : Node
 
 	// Start main thread
 	// NOTE: choose which main function to execute for testing purposes
-	main_thread_ = std::thread(std::bind(&ParkAndInteract::main_thread_demo, this));
+	main_thread_ = std::thread(std::bind(&ParkAndButtonPress::main_thread_demo, this));
 	main_thread_.detach();
 }
 
@@ -38,7 +38,7 @@ ParkAndInteract::ParkAndInteract(const rclcpp::NodeOptions &node_options) : Node
  * @brief Callback function for receiving target pose from /target_pose topic
  * @param msg target pose stamped message
  */
-void ParkAndInteract::target_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+void ParkAndButtonPress::target_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
 	target_available = true;
 	target_pose = msg;
 }
@@ -49,7 +49,7 @@ void ParkAndInteract::target_callback(const geometry_msgs::msg::PoseStamped::Sha
  *  	Requires subscription to /target_pose topic for receiving target pose
  *		This function is used for testing purposes mainly, since it tests only the parking action.
  */
-void ParkAndInteract::main_thread_parking_only() {
+void ParkAndButtonPress::main_thread_parking_only() {
 	RCLCPP_INFO(logger_, "Initializing main_thread_parking_only");
 	// sleep 5 seconds
 	std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -88,7 +88,7 @@ void ParkAndInteract::main_thread_parking_only() {
  * 		The target pose returned as a result is published to /target_pose topic for visualization in rviz2
  * 		The feedback from the action server is also logged
  */
-void ParkAndInteract::main_thread_button_finder(void) {
+void ParkAndButtonPress::main_thread_button_finder(void) {
 	RCLCPP_INFO(logger_, "Initializing main_thread_button_finder");
 	// sleep 5 seconds
 	std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -129,7 +129,7 @@ void ParkAndInteract::main_thread_button_finder(void) {
  * 		The result of the action server (movement success percentage) is logged
  * 		The feedback from the action server is also logged
  */
-void ParkAndInteract::main_thread_button_presser(void) {
+void ParkAndButtonPress::main_thread_button_presser(void) {
 	RCLCPP_INFO(logger_, "Initializing main_thread_button_presser");
 	// sleep 5 seconds
 	std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -164,7 +164,7 @@ void ParkAndInteract::main_thread_button_presser(void) {
  * 		All the steps are executed in sequence, and the result of each step is used to trigger the next step.
  * 		Each step assumes that the previous step has been completed successfully.
  */
-void ParkAndInteract::main_thread_demo(void) {
+void ParkAndButtonPress::main_thread_demo(void) {
 	RCLCPP_INFO(logger_, "Initializing main_thread_demo");
 	// sleep 5 seconds
 	std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -240,7 +240,7 @@ void ParkAndInteract::main_thread_demo(void) {
  * @brief Send goal to parking action server and setup callbacks for goal response, feedback and result
  * @return future for the goal handle, used to keep track of the goal final outcome
  */
-std::shared_future<GoalHandleParking::SharedPtr> ParkAndInteract::sendParkingGoal(void) {
+std::shared_future<GoalHandleParking::SharedPtr> ParkAndButtonPress::sendParkingGoal(void) {
 	// wait for action server to be up and running
 	while (!parking_action_client_->wait_for_action_server(std::chrono::milliseconds(100))) {
 		RCLCPP_INFO(logger_, "Waiting for parking action server to be up...");
@@ -254,11 +254,11 @@ std::shared_future<GoalHandleParking::SharedPtr> ParkAndInteract::sendParkingGoa
 	auto send_goal_options = rclcpp_action::Client<ParkingAction>::SendGoalOptions();
 	// setup callbacks for goal response, feedback and result
 	send_goal_options.goal_response_callback =
-		std::bind(&ParkAndInteract::parkingGoalResponseCallback, this, std::placeholders::_1);
+		std::bind(&ParkAndButtonPress::parkingGoalResponseCallback, this, std::placeholders::_1);
 	send_goal_options.feedback_callback =
-		std::bind(&ParkAndInteract::parkingFeedbackCallback, this, std::placeholders::_1, std::placeholders::_2);
+		std::bind(&ParkAndButtonPress::parkingFeedbackCallback, this, std::placeholders::_1, std::placeholders::_2);
 	send_goal_options.result_callback =
-		std::bind(&ParkAndInteract::parkingResultCallback, this, std::placeholders::_1);
+		std::bind(&ParkAndButtonPress::parkingResultCallback, this, std::placeholders::_1);
 
 	// send goal to action server with the given callbacks
 	// use future to handle final outcome of the goal request
@@ -275,7 +275,7 @@ std::shared_future<GoalHandleParking::SharedPtr> ParkAndInteract::sendParkingGoa
  * @brief Callback function for receiving goal response from action server
  * @param goal_handle goal handle for the parking action
  */
-void ParkAndInteract::parkingGoalResponseCallback(const GoalHandleParking::SharedPtr &goal_handle) {
+void ParkAndButtonPress::parkingGoalResponseCallback(const GoalHandleParking::SharedPtr &goal_handle) {
 	if (!goal_handle) {
 		RCLCPP_ERROR(logger_, "Parking goal was rejected by server");
 	} else {
@@ -288,7 +288,7 @@ void ParkAndInteract::parkingGoalResponseCallback(const GoalHandleParking::Share
  * @param goal_handle goal handle for the parking action
  * @param feedback feedback message from the action server
  */
-void ParkAndInteract::parkingFeedbackCallback(GoalHandleParking::SharedPtr /*goal_handle*/,
+void ParkAndButtonPress::parkingFeedbackCallback(GoalHandleParking::SharedPtr /*goal_handle*/,
 											  const std::shared_ptr<const ParkingAction::Feedback> feedback) {
 	// logging feedback data
 	RCLCPP_INFO(logger_, "Feedback: distance remaining = %.3f", feedback->distance_remaining);
@@ -307,7 +307,7 @@ void ParkAndInteract::parkingFeedbackCallback(GoalHandleParking::SharedPtr /*goa
  * @brief Callback function for receiving result from parking action server
  * @param result result message from the action server
  */
-void ParkAndInteract::parkingResultCallback(const GoalHandleParking::WrappedResult &result) {
+void ParkAndButtonPress::parkingResultCallback(const GoalHandleParking::WrappedResult &result) {
 	switch (result.code) {
 	case rclcpp_action::ResultCode::SUCCEEDED:
 		RCLCPP_INFO(logger_, "Parking succeeded");
@@ -339,7 +339,7 @@ void ParkAndInteract::parkingResultCallback(const GoalHandleParking::WrappedResu
  * @brief Send goal to button finder action server and setup callbacks for goal response, feedback and result
  * @return future for the goal handle, used to keep track of the goal final outcome
  */
-std::shared_future<GoalHandleButtonFinder::SharedPtr> ParkAndInteract::sendButtonFinderGoal(void) {
+std::shared_future<GoalHandleButtonFinder::SharedPtr> ParkAndButtonPress::sendButtonFinderGoal(void) {
 	// wait for action server to be up and running
 	while (!button_finder_action_client_->wait_for_action_server(std::chrono::milliseconds(100))) {
 		RCLCPP_INFO(logger_, "Waiting for button finder action server to be up...");
@@ -352,11 +352,11 @@ std::shared_future<GoalHandleButtonFinder::SharedPtr> ParkAndInteract::sendButto
 	auto send_goal_options = rclcpp_action::Client<ButtonFinderAction>::SendGoalOptions();
 	// setup callbacks for goal response, feedback and result
 	send_goal_options.goal_response_callback =
-		std::bind(&ParkAndInteract::buttonFinderGoalResponseCallback, this, std::placeholders::_1);
+		std::bind(&ParkAndButtonPress::buttonFinderGoalResponseCallback, this, std::placeholders::_1);
 	send_goal_options.feedback_callback =
-		std::bind(&ParkAndInteract::buttonFinderFeedbackCallback, this, std::placeholders::_1, std::placeholders::_2);
+		std::bind(&ParkAndButtonPress::buttonFinderFeedbackCallback, this, std::placeholders::_1, std::placeholders::_2);
 	send_goal_options.result_callback =
-		std::bind(&ParkAndInteract::buttonFinderResultCallback, this, std::placeholders::_1);
+		std::bind(&ParkAndButtonPress::buttonFinderResultCallback, this, std::placeholders::_1);
 
 	// send goal to action server with the given callbacks
 	// use future to handle final outcome of the goal request
@@ -369,7 +369,7 @@ std::shared_future<GoalHandleButtonFinder::SharedPtr> ParkAndInteract::sendButto
  * @brief Callback function for receiving goal response from button finder action server
  * @param goal_handle goal handle for the button finder action
  */
-void ParkAndInteract::buttonFinderGoalResponseCallback(const GoalHandleButtonFinder::SharedPtr &goal_handle) {
+void ParkAndButtonPress::buttonFinderGoalResponseCallback(const GoalHandleButtonFinder::SharedPtr &goal_handle) {
 	if (!goal_handle) {
 		RCLCPP_ERROR(logger_, "Button finder goal was rejected by server");
 	} else {
@@ -382,7 +382,7 @@ void ParkAndInteract::buttonFinderGoalResponseCallback(const GoalHandleButtonFin
  * @param goal_handle goal handle for the button finder action
  * @param feedback feedback message from the action server
  */
-void ParkAndInteract::buttonFinderFeedbackCallback(GoalHandleButtonFinder::SharedPtr /*goal_handle*/,
+void ParkAndButtonPress::buttonFinderFeedbackCallback(GoalHandleButtonFinder::SharedPtr /*goal_handle*/,
 												   const std::shared_ptr<const ButtonFinderAction::Feedback> feedback) {
 	// logging feedback data
 	RCLCPP_INFO(logger_, "Feedback: %s", feedback->status.c_str());
@@ -392,7 +392,7 @@ void ParkAndInteract::buttonFinderFeedbackCallback(GoalHandleButtonFinder::Share
  * @brief Callback function for receiving result from button finder action server
  * @param result result message from the action server
  */
-void ParkAndInteract::buttonFinderResultCallback(const GoalHandleButtonFinder::WrappedResult &result) {
+void ParkAndButtonPress::buttonFinderResultCallback(const GoalHandleButtonFinder::WrappedResult &result) {
 	RCLCPP_INFO(logger_, "Result: target acquired. x = %.3f, y = %.3f, z = %.3f", result.result->target.pose.position.x,
 				result.result->target.pose.position.y, result.result->target.pose.position.z);
 	RCLCPP_INFO(logger_, "Result: target frame_id = %s", result.result->target.header.frame_id.c_str());
@@ -404,7 +404,7 @@ void ParkAndInteract::buttonFinderResultCallback(const GoalHandleButtonFinder::W
  * @brief Send goal to button presser action server and setup callbacks for goal response, feedback and result
  * @return future for the goal handle, used to keep track of the goal final outcome
  */
-std::shared_future<GoalHandleButtonPresser::SharedPtr> ParkAndInteract::sendButtonPresserGoal(void) {
+std::shared_future<GoalHandleButtonPresser::SharedPtr> ParkAndButtonPress::sendButtonPresserGoal(void) {
 	// wait for action server to be up and running
 	while (!button_presser_action_client_->wait_for_action_server(std::chrono::milliseconds(100))) {
 		RCLCPP_INFO(logger_, "Waiting for button presser action server to be up...");
@@ -417,11 +417,11 @@ std::shared_future<GoalHandleButtonPresser::SharedPtr> ParkAndInteract::sendButt
 	auto send_goal_options = rclcpp_action::Client<ButtonPresserAction>::SendGoalOptions();
 	// setup callbacks for goal response, feedback and result
 	send_goal_options.goal_response_callback =
-		std::bind(&ParkAndInteract::buttonPresserGoalResponseCallback, this, std::placeholders::_1);
+		std::bind(&ParkAndButtonPress::buttonPresserGoalResponseCallback, this, std::placeholders::_1);
 	send_goal_options.feedback_callback =
-		std::bind(&ParkAndInteract::buttonPresserFeedbackCallback, this, std::placeholders::_1, std::placeholders::_2);
+		std::bind(&ParkAndButtonPress::buttonPresserFeedbackCallback, this, std::placeholders::_1, std::placeholders::_2);
 	send_goal_options.result_callback =
-		std::bind(&ParkAndInteract::buttonPresserResultCallback, this, std::placeholders::_1);
+		std::bind(&ParkAndButtonPress::buttonPresserResultCallback, this, std::placeholders::_1);
 
 	// send goal to action server with the given callbacks
 	// use future to handle final outcome of the goal request
@@ -435,7 +435,7 @@ std::shared_future<GoalHandleButtonPresser::SharedPtr> ParkAndInteract::sendButt
  * @brief Callback function for receiving goal response from button presser action server
  * @param goal_handle goal handle for the button presser action
  */
-void ParkAndInteract::buttonPresserGoalResponseCallback(const GoalHandleButtonPresser::SharedPtr &goal_handle) {
+void ParkAndButtonPress::buttonPresserGoalResponseCallback(const GoalHandleButtonPresser::SharedPtr &goal_handle) {
 	if (!goal_handle) {
 		RCLCPP_ERROR(logger_, "Button presser goal was rejected by server");
 	} else {
@@ -448,7 +448,7 @@ void ParkAndInteract::buttonPresserGoalResponseCallback(const GoalHandleButtonPr
  * @param goal_handle goal handle for the button presser action
  * @param feedback feedback message from the action server
  */
-void ParkAndInteract::buttonPresserFeedbackCallback(GoalHandleButtonPresser::SharedPtr /*goal_handle*/,
+void ParkAndButtonPress::buttonPresserFeedbackCallback(GoalHandleButtonPresser::SharedPtr /*goal_handle*/,
 													const std::shared_ptr<const ButtonPresserAction::Feedback> feedback) {
 	// logging feedback data
 	RCLCPP_INFO(logger_, "Feedback: %s", feedback->status.c_str());
@@ -458,7 +458,7 @@ void ParkAndInteract::buttonPresserFeedbackCallback(GoalHandleButtonPresser::Sha
  * @brief Callback function for receiving result from button presser action server
  * @param result result message from the action server
  */
-void ParkAndInteract::buttonPresserResultCallback(const GoalHandleButtonPresser::WrappedResult &result) {
+void ParkAndButtonPress::buttonPresserResultCallback(const GoalHandleButtonPresser::WrappedResult &result) {
 	int n_goals_completed = result.result->n_goals_completed;
 	float percent_completion = result.result->percent_completion;
 	RCLCPP_INFO(logger_, "Result: %d goals completed out of 13; %.2f percent completion in linear motions",
@@ -467,7 +467,7 @@ void ParkAndInteract::buttonPresserResultCallback(const GoalHandleButtonPresser:
 
 int main(int argc, char **argv) {
 	rclcpp::init(argc, argv);
-	auto node = std::make_shared<ParkAndInteract>();
+	auto node = std::make_shared<ParkAndButtonPress>();
 
 	rclcpp::spin(node);
 	rclcpp::shutdown();

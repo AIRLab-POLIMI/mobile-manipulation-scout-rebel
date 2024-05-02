@@ -89,10 +89,10 @@ def generate_launch_description():
         # parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    parking_and_interact_client = Node(
+    park_and_button_press_client = Node(
         package='client_demos',
-        executable='park_and_interact',
-        name='park_and_interact',
+        executable='park_and_button_press',
+        name='Park_and_button_press_client',
         output='screen',
         emulate_tty=True,
         # parameters=[{'use_sim_time': use_sim_time}]
@@ -102,5 +102,5 @@ def generate_launch_description():
         button_presser_action_servers,
         rviz2_node,
         robot_parking_action_server,
-        parking_and_interact_client]
-    )
+        park_and_button_press_client
+    ])

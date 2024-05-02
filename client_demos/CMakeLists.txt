@@ -27,10 +27,10 @@ find_package(mobile_manipulation_interfaces REQUIRED)
 include_directories(include)
 
 # Create Cpp executable
-add_executable(park_and_interact 
-	src/park_and_interact.cpp
+add_executable(park_and_button_press 
+	src/park_and_button_press.cpp
 )
-ament_target_dependencies(park_and_interact
+ament_target_dependencies(park_and_button_press
 	rclcpp rclcpp_action rclcpp_components std_msgs geometry_msgs
 	tf2_geometry_msgs mobile_manipulation_interfaces
 )
@@ -65,7 +65,7 @@ ament_target_dependencies(mobile_object_picking
 
 # Install Cpp executables
 install(TARGETS 
-	park_and_interact
+	park_and_button_press
 	mobile_object_picking
 	DESTINATION lib/${PROJECT_NAME}
 )
