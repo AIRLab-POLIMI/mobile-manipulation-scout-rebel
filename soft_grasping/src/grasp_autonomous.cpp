@@ -159,8 +159,25 @@ bool GraspAutonomous::acquireObjectDetections() {
 			object_detections_saved->at(0).timestamp == object_detections->at(0).timestamp) {
 			return false;
 		}
+	}
 
-		*object_detections_saved = std::vector<BallPerception::ObjectDetection>(*object_detections);
+	rclcpp::Time now = this->now();
+	// wait for the object detections to be updated
+	while (object_detections->size() > 0) {
+		{ // acquire the lock save the object detections
+			std::lock_guard<std::mutex> lock(object_detections_mutex);
+
+			if (now <= object_detections->at(0).timestamp) {
+				break;
+			}
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(20));
+	}
+
+	// save the object detections once they are updated
+	{
+		std::lock_guard<std::mutex> lock(object_detections_mutex);
+		*object_detections_saved = *object_detections;
 	}
 
 	return true;

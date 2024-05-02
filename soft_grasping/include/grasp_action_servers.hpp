@@ -140,9 +140,9 @@ private:
 	std::shared_ptr<GraspAutonomous> grasp_autonomous_;
 
 	// last searching waypoint pose
-	std::array<double, 6> last_searched_pose;
+	std::array<double, 6> last_searched_pose = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
-	const std::array<double, 6> dropping_pose = {0.0, -1.57, 0.0, -1.57, 0.0, 0.0};
+	const std::array<double, 6> dropping_pose = {1.0, 0.5, 1.5, 0.0, 1.0, 0.0};
 
 	// logger
 	const rclcpp::Logger LOGGER = rclcpp::get_logger("soft_grasping::grasp_action_servers");

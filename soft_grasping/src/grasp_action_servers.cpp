@@ -293,7 +293,8 @@ bool GraspActionServers::executeObjectPicking(geometry_msgs::msg::PoseStamped::S
 
 	// move to parked position
 	moveit2_apis_->addCollisionWallsToScene();
-	moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
+	// TODO: enable this line when robot is loaded on mobile robot base
+	//moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
 	moveit2_apis_->removeCollisionWalls();
 	return picking_success;
 }
@@ -351,7 +352,8 @@ void GraspActionServers::execute_dropping_callback(const std::shared_ptr<GoalHan
 
 	// move back to parked position
 	moveit2_apis_->addCollisionWallsToScene();
-	moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
+	// TODO: enable this line when robot is loaded on mobile robot base
+	//moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
 	moveit2_apis_->removeCollisionWalls();
 
 	// succeed the goal

@@ -28,8 +28,17 @@ include_directories(include)
 
 # Create Cpp executable
 add_executable(park_and_interact 
-	src/park_and_interact.cpp)
+	src/park_and_interact.cpp
+)
 ament_target_dependencies(park_and_interact
+	rclcpp rclcpp_action rclcpp_components std_msgs geometry_msgs
+	tf2_geometry_msgs mobile_manipulation_interfaces
+)
+
+add_executable(mobile_object_picking
+	src/mobile_object_picking.cpp
+)
+ament_target_dependencies(mobile_object_picking
 	rclcpp rclcpp_action rclcpp_components std_msgs geometry_msgs
 	tf2_geometry_msgs mobile_manipulation_interfaces
 )
@@ -57,6 +66,7 @@ ament_target_dependencies(park_and_interact
 # Install Cpp executables
 install(TARGETS 
 	park_and_interact
+	mobile_object_picking
 	DESTINATION lib/${PROJECT_NAME}
 )
 
