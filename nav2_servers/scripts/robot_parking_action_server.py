@@ -20,6 +20,9 @@ from nav2_servers.park_robot import RobotParking
 from nav2_servers.robot_navigator import BasicNavigator, TaskResult
 from nav2_servers.costmap_2d import PyCostmap2D
 
+# python imports
+import yaml
+
 
 class RobotParkingActionServer(Node):
     """ RobotParkingActionServer: action server for parking algorithm computation and navigation to target goal computed
@@ -42,6 +45,10 @@ class RobotParkingActionServer(Node):
         super().__init__('robot_parking_action_server')
 
         self.parking_node = robot_parking
+
+        # read yaml configuration file from the parameter server
+        self.declare_parameter('waypoints_config', "")
+        self.yaml_config = self.get_parameter("waypoints_config").get_parameter_value().string_value
 
         # Create action server with your custom messages
         self._action_server = ActionServer(
@@ -74,9 +81,11 @@ class RobotParkingActionServer(Node):
 
         # Extraction of the target pose from the goal handle
         req = goal_handle.request
-        goal_pose = req.goal_pose
-
-        self.update_parking_goal_pose(goal_pose)
+        if req.goal_waypoint != "":
+            self.update_parking_goal_waypoint(req.goal_waypoint)
+        else:
+            goal_pose = req.goal_pose
+            self.update_parking_goal_pose(goal_pose)
 
         # Set initial pose
         self.initial_pose = self.parking_node.get_current_pose()
@@ -90,7 +99,7 @@ class RobotParkingActionServer(Node):
         # Wait for navigation to fully activate, since autostarting nav2
         self.parking_node.navigator.waitUntilNav2Active(localizer="robot_localization")
 
-        global_costmap = self.parking_node.navigator.getGlobalCostmap() # only static layer inflated
+        global_costmap = self.parking_node.navigator.getGlobalCostmap()  # only static layer inflated
         costmap = PyCostmap2D(global_costmap)
         self.parking_node.checker.setCostmap(costmap)
 
@@ -181,13 +190,13 @@ class RobotParkingActionServer(Node):
         result_msg.final_position = current_pose
 
         return result_msg
-    
+
     def update_parking_goal_pose(self, goal_pose: PoseStamped):
 
         # transform the goal pose to the map frame
-        transform = self.parking_node.get_tf(source_frame=goal_pose.header.frame_id, 
+        transform = self.parking_node.get_tf(source_frame=goal_pose.header.frame_id,
                                              target_frame="map")
-        
+
         goal_pose_tf = tf2_geometry_msgs.do_transform_pose(goal_pose.pose, transform)
 
         target_xyz = goal_pose_tf.position
@@ -200,6 +209,27 @@ class RobotParkingActionServer(Node):
 
         # update target pose in the parking algorithm
         self.parking_node.update_target_pose(target_xyz, yaw)
+
+    def update_parking_goal_waypoint(self, goal_waypoint: str):
+
+        # read the corresponding waypoint from the waypoint list from the yaml configuration file
+        def load_yaml(filename: str):
+            with open(filename, 'r') as file:
+                return yaml.safe_load(file)
+
+        waypoints = load_yaml(self.yaml_config)
+        self.get_logger().info("Server: received target waypoint: {}".format(goal_waypoint))
+        self.get_logger().info("Server: yaml config file: {}".format(waypoints))
+        target = waypoints[goal_waypoint]
+
+        target_xyz = Point32()
+        target_xyz.x = target['x']
+        target_xyz.y = target['y']
+        target_xyz.z = 0.0
+        target_yaw = target['theta']
+
+        # update target waypoint in the parking algorithm
+        self.parking_node.update_target_pose(target_xyz, target_yaw)
 
 
 def main(args=None):

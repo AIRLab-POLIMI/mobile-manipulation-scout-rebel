@@ -1,5 +1,6 @@
 # Request
 geometry_msgs/PoseStamped goal_pose
+string goal_waypoint
 ---
 # Result
 string nav2_result
