@@ -1,12 +1,13 @@
 # Mobile Manipulation tasks with AgileX Scout wheeled robot and Igus Rebel robotic arm
 
-#### Project carried out by __Simone Giampà__
+#### Contributor
 
-__Politecnico di Milano__, __Master of Science in Computer Science and Engineering__
+Code developed and tested by: __Simone Giampà__
 
-Work and experimentations conducted at: Artificial Intelligence and Robotics Laboratory (__AIRLab__)
+Project and experimentations conducted at __Politecnico di Milano, Artificial Intelligence and Robotics Laboratory, 2024__
 
-Academic Year 2023/2024
+_Project part of my Master's Thesis Project at Politecnico di Milano, Italy._
+
 
 ## Package description
 

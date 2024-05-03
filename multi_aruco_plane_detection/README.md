@@ -1,16 +1,22 @@
-# Robust and Noise-Tolerant Plane Detection using Multiple Coplanr Aruco Markers
+# Robust and Noise-Tolerant Plane Detection using Multiple Coplanar Aruco Markers
 
-Given a multi-aruco setup, consisting of multiple Aruco markers placed on a plane, this package detects the plane 
-of the aruco markers and the correct orientation of the multi-aruco setup. The package is designed to be robust to noise 
-and can handle (in theory) a large number of Aruco markers.
+Given a multi-aruco setup, consisting of multiple Aruco markers placed on the same plane, this package computes the plane 
+of the aruco markers and their correct and precise orientation. The package is designed to be robust to noise 
+and outlier data points. The algorithm is meant to compensate lack of precision in the markers' pose estimation,
+which is often highly imprecise if the markers are far from the camera or if the camera is not well calibrated.
+This system allows estimating the correct orientation of multiple markers at the same time, provided that they are
+coplanar and have the same orientation.
 
-Code developed by: __Simone Giampà__
+#### Contributor
+Code developed and tested by: __Simone Giampà__
 
-Project and experimentation conducted at __Politecnico di Milano, Artificial Intelligence and Robotics Laboratory, 2024__
+Project and experimentations conducted at __Politecnico di Milano, Artificial Intelligence and Robotics Laboratory, 2024__
 
-_Project part of my Master's Thesis project at Politecnico di Milano, Italy._
+_Project part of my Master's Thesis Project at Politecnico di Milano, Italy._
 
-## Description of the Aruco Setup
+## Description
+
+### Multi Aruco Setup
 
 The setup used for these tests is composed of 7 markers in a plane, 2 in the top row, and 5 in the bottom row.
 The markers are used to estimate the positions of the buttons on the setup, which is used for robotic manipulation tasks.
@@ -18,22 +24,23 @@ The markers are used to estimate the positions of the buttons on the setup, whic
 The system is:
 - **Robust to noise**: SVD and PCA algorithms are used to estimate the plane and the orientation of the multi-aruco setup. 
   These algorithms are robust to noise and can handle a large number of markers.
-- **Fast**: operates at 30Hz on a standard laptop, the same frequency of the camera image publisher.
+- **Fast**: operates at the same frequency as the camera driver, but can easily be adapted to work at a higher frequency.
 - **Robust to outliers**: the RANSAC algorithm is used to estimate the plane of the multi-aruco setup. This algorithm is 
   robust to outliers and can discard non-relevant data points outside the expected data distribution.
 
-## Description of the Algorithm
+### Algorithm Definition
 
-The algorithm is based on the following steps:
-1. Given the Aruco markers in the image, and their poses estimated (positions and orientations)
+The algorithm works as follows:
+1. Given the Aruco Markers estimated (positions and orientations) poses in the input image, processes the data to estimate the
+   most precise and correct orientation of the multi-aruco setup, assuming that all markers are placed on the same plane.
 2. The algorithm estimates the plane of the Aruco markers using a RANSAC algorithm. Each iteration of the RANSAC algorithm
    estimates a plane using a random subset of Aruco markers. The plane with the most inliers is selected as the best plane.
-3. The algorithm used for estimation of the plane coordinates is based on SVD (Singular Value Decomposition) of the Aruco markers
-   positions. The SVD algorithm is used to estimate the normal vector of the plane.
-4. The normal vector to the plane corresponds to the z axis of the multi-aruco setup.
-5. Then the algorithm estimates the x,y axes orientation of the plane using the other markers positions. The x axis orientation
-    is estimated using with the PCA algorithm (Principal Component Analysis) of the bottom markers positions projected onto the plane.
-6. The y axis orientation is estimated using the cross product between the z axis and the x axis computed.
+3. The algorithm used for the estimation of the plane coordinates is based on SVD (*Singular Value Decomposition*) of the markers
+   positions. The SVD algorithm is used to estimate the vector normal to the plane.
+4. The normal vector to the plane corresponds to the z-axis of the multi-aruco setup.
+5. Then the algorithm estimates the x,y-axes orientation of the plane using the other markers positions. The x-axis orientation
+   is estimated using the PCA algorithm (*Principal Component Analysis*) of the bottom markers positions projected onto the plane.
+6. The y-axis orientation is estimated using the cross-product between the computed z-axis and the x-axis.
 7. Then the final orientation of the multi-aruco setup is obtained by converting the transformation matrix of the vectors into a
     rotation quaternion. The orientation is then applied to all aruco markers.
 

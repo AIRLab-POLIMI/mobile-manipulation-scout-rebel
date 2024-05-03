@@ -2,6 +2,14 @@
 
 Custom messages and actions definitions for the action servers and clients in the context of mobile manipulation tasks.
 
+#### Contributor
+
+Code developed and tested by: __Simone Giampà__
+
+Project and experimentations conducted at __Politecnico di Milano, Artificial Intelligence and Robotics Laboratory, 2024__
+
+_Project part of my Master's Thesis Project at Politecnico di Milano, Italy._
+
 ## Custom Actions
 
 The following custom actions are defined in this package:
