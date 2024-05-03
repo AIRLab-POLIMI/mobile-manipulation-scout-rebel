@@ -26,7 +26,7 @@ find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(mobile_manipulation_interfaces REQUIRED)
 find_package(igus_rebel_gripper_controller REQUIRED)
-find_package(moveit2_servers REQUIRED)
+find_package(moveit2_api REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -34,7 +34,7 @@ find_package(PCL REQUIRED)
 find_package(pcl_msgs REQUIRED)
 
 # ----------------------- C++ -----------------------
-include_directories(include )
+include_directories(include)
 
 # ---------------------------------------------------------------
 # DEMO 1: Grasp with input click (click on the object to grasp)
@@ -49,7 +49,7 @@ add_executable(grasp_with_input_click
 ament_target_dependencies(grasp_with_input_click
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
 	std_msgs geometry_msgs 
-	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_servers
+	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_api
 	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
 
 # ---------------------------------------------------------------
@@ -64,7 +64,7 @@ add_executable(grasp_autonomous
 ament_target_dependencies(grasp_autonomous
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
 	std_msgs geometry_msgs 
-	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_servers
+	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_api
 	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
 
 
@@ -80,7 +80,7 @@ add_executable(grasp_action_servers
 ament_target_dependencies(grasp_action_servers
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
 	std_msgs geometry_msgs 
-	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_servers
+	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_api
 	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
 
 # ---------------------------------------------------------------

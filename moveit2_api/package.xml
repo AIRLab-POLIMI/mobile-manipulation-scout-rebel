@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-	<name>moveit2_servers</name>
+	<name>moveit2_api</name>
 	<version>0.1.0</version>
-	<description> MoveIt2 C++ interface for commanding and controlling the robot. It contains the button presser demo,
-		which consists in the igus rebel robot pressing buttons on a setup box in a sequence.
+	<description> MoveIt2 C++ interface for commanding and controlling the robot, with functionalities for
+        planning, execution of trajectories, and visualization of the robot joint trajectories in RViz2.
 	</description>
 
 	<maintainer email="simone.giampa@mail.polimi.it">Simone Giampà</maintainer>
@@ -15,19 +15,14 @@
 
 	<buildtool_depend>ament_cmake</buildtool_depend>
 
-	<build_depend>aruco_interfaces</build_depend>
-	<build_depend>mobile_manipulation_interfaces</build_depend>
-
 	<exec_depend>moveit_planners</exec_depend>
-	<exec_depend>joint_state_publisher</exec_depend>
-	<exec_depend>xacro</exec_depend>
 	<exec_depend>joint_trajectory_controller</exec_depend>
 	<exec_depend>igus_rebel_description_ros2</exec_depend>
 	<exec_depend>moveit_ros_move_group</exec_depend>
 	<exec_depend>moveit_ros_visualization</exec_depend>
-	<exec_depend>rviz2</exec_depend>
 
 	<depend>rclcpp</depend>
+	<depend>rviz2</depend>
 	<depend>moveit_visual_tools</depend>
 	<depend>moveit_core</depend>
 	<depend>pluginlib</depend>

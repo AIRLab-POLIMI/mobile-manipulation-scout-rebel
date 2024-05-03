@@ -19,7 +19,7 @@ def generate_launch_description():
 
     # create node for goal pose publisher
     test_button_pose_computation_node = Node(
-        package="moveit2_servers",
+        package="button_presser",
         executable="test_button_pose_computation",
         name="test_button_pose_computation_node",
         output="screen",
@@ -30,7 +30,7 @@ def generate_launch_description():
     )
 
     rviz_file = PathJoinSubstitution(
-        [FindPackageShare("moveit2_servers"), "rviz", "button_presser.rviz"]
+        [FindPackageShare("button_presser"), "rviz", "button_presser.rviz"]
     )
 
     rviz2_node = Node(

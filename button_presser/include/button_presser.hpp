@@ -14,6 +14,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
+// library for MoveIt2 functionalities
 #include "moveit2_apis.hpp"
 
 // custom message definition for aruco markers
@@ -27,7 +28,7 @@
 class ButtonPresser : public rclcpp::Node {
 
 private:
-	const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit2::button_presser");
+	const rclcpp::Logger LOGGER = rclcpp::get_logger("button_presser");
 
 	// topics for the aruco markers
 	const std::string aruco_markers_corrected_topic = "/aruco/markers/corrected";

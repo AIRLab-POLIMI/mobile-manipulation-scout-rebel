@@ -3,8 +3,10 @@
 // Master Degree: Computer Science Engineering
 // Laboratory: Artificial Intelligence and Robotics Laboratory (AIRLab)
 
+#ifndef BUTTON_PRESSER_ACTION_SERVERS_HPP
+#define BUTTON_PRESSER_ACTION_SERVERS_HPP
+
 // ROS2 C++ imports
-#include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 
 // button presser API code
@@ -145,3 +147,5 @@ private:
 };
 
 } // namespace moveit2_action_servers
+
+#endif // BUTTON_PRESSER_ACTION_SERVERS_HPP

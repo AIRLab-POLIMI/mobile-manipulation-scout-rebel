@@ -21,7 +21,7 @@ def generate_launch_description():
     args.append(camera_frame_arg)
 
     button_presser_demo_node = Node(
-        package="moveit2_servers",
+        package="button_presser",
         executable="button_presser_demo",
         name="button_presser_demo_node",
         parameters=moveit_loader.load_moveit(with_sensors3d=False) + [{
@@ -33,7 +33,7 @@ def generate_launch_description():
     rviz_file_name = "button_presser.rviz"
 
     rviz_file = PathJoinSubstitution(
-        [FindPackageShare("moveit2_servers"), "rviz", rviz_file_name]
+        [FindPackageShare("button_presser"), "rviz", rviz_file_name]
     )
 
     rviz2_node = Node(

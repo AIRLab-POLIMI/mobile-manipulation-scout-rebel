@@ -11,7 +11,7 @@ run_ros2_launch_in_konsole "multi_aruco_plane_detection multi_aruco_plane_detect
 run_ros2_launch_in_konsole "igus_rebel_moveit_config moveit_controller.launch.py hardware_protocol:=simulation load_base:=true" &
 sleep 4
 
-run_ros2_launch_in_konsole "moveit2_servers button_press_demo.launch.py load_base:=true" 
+run_ros2_launch_in_konsole "button_presser button_press_demo.launch.py load_base:=true" 
 
 
 # You can add more launch files as needed

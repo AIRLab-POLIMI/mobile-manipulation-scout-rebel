@@ -17,6 +17,7 @@
 	<buildtool_depend>ament_cmake</buildtool_depend>
 	<buildtool_depend>ament_cmake_python</buildtool_depend>
 	<build_depend>mobile_manipulation_interfaces</build_depend>
+	<build_depend>moveit2_api</build_depend>
 
 	<depend>rclcpp</depend>
 	<depend>rclpy</depend>
