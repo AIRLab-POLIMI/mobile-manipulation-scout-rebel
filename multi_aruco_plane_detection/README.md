@@ -69,9 +69,27 @@ Install the Eigen3 library with:
 sudo apt install libeigen3-dev
 ```
 
-After cloning the repository in your workspace folder, build from source with:
 
-```bash
-colcon build --symlink-install
-source install/setup.bash
+## Project structure
+
+The project is structured as follows:
+
+```
+multi_aruco_plane_detection
+│
+├── include
+│   └── multi_aruco_plane_detection.hpp # Header file for the multi-aruco plane detection class
+│
+├── src
+│   └── multi_aruco_plane_detection.cpp # Source file for the multi-aruco plane detection class
+│
+├── launch
+│   └── multi_aruco_plane_detection.launch.py # Launch file for the multi-aruco plane detection node
+│
+├── rviz
+│   └── multi_aruco.rviz # RViz configuration file for the multi-aruco plane detection node
+│
+├── CMakeLists.txt
+├── package.xml
+└── README.md
 ```

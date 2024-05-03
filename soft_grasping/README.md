@@ -80,32 +80,32 @@ soft_grasping
 ├── package.xml
 │
 ├───config
-│   ├── camera.yaml # camera topics and frames names for the perception pipeline
+│   └── camera.yaml # camera topics and frames names for the perception pipeline
 │
 ├── launch
 │   ├── grasp_autonomously.launch.py # launch file for the autonomous manipulation task with the object detection tensorflow model
-│   ├── grasp_with_input_click.launch.py # launch file for the semi-autonomous manipulation task using a click input for the object detection
+│   └── grasp_with_input_click.launch.py # launch file for the semi-autonomous manipulation task using a click input for the object detection
 │
 ├───scripts
-│   ├── target_click.py # script for taking pixel coordinates as input on the camera image feed
-|
+│   └── target_click.py # script for taking pixel coordinates as input on the camera image feed
+│
 ├───src
 │   ├── main_grasp_autonomous.cpp # main file for the autonomous manipulation task with object detection neural network
 │   ├── main_grasp_with_input_click.cpp # main file for the semi-autonomous manipulation task using a click input for the object detection
 │   ├── grasp_pose_estimator.cpp # functions for computing the grasping pose for the end effector given the ball center and radius
 │   ├── grasp_autonomous.cpp # functions for the demo for the autonomous manipulation task with object detection neural network
 │   ├── grasp_with_input_click.cpp # functions for the demo for the semi-autonomous manipulation task using a click input for the object detection
-|   ├── ball_perception.cpp # utility functions for the perception pipeline using the RGBD camera and the neural network for object detection
-|
+│   └── ball_perception.cpp # utility functions for the perception pipeline using the RGBD camera and the neural network for object detection
+│
 ├───include
 │   ├── grasp_pose_estimator.hpp # header file for the functions for computing the grasping pose for the end effector given the ball center and radius
 │   ├── grasp_autonomous.hpp # header file for the demo for the autonomous manipulation task with object detection neural network
 │   ├── grasp_with_input_click.hpp # header file for the demo for the semi-autonomous manipulation task using a click input for the object detection
-|   ├── ball_perception.hpp # header file for the functions for the perception pipeline using the RGBD camera and the NN for object detection
-|
+│   └── ball_perception.hpp # header file for the functions for the perception pipeline using the RGBD camera and the NN for object detection
+│
 ├───rviz
-|   ├── target_click.rviz # rviz configuration file for the semi-autonomous manipulation task using a click input for the object detection
-|   ├── target_detection.rviz # rviz configuration file for the autonomous manipulation task with the object detection neural network
+│   ├── target_click.rviz # rviz configuration file for the semi-autonomous manipulation task using a click input for the object detection
+│   └── target_detection.rviz # rviz configuration file for the autonomous manipulation task with the object detection neural network
 ```
  
 ## Dependencies
@@ -119,7 +119,7 @@ in this repository.
 The controller for the Soft Gripper is located in the package `igus_rebel_gripper_controller` in the other repository
 [ros2-igus-rebel](https://github.com/AIRLab-POLIMI/ros2-igus-rebel).
 
-The MoveIt2 APIs library is a custom library defined in the package `moveit2_servers` in this repository. It contains the
+The MoveIt2 APIs library is a custom library defined in the package `moveit2_api` in this repository. It contains the
 functions and utilities for interfacing with the MoveIt2 APIs, which provide the planning and execution capabilities for the
 robotic arm.
 

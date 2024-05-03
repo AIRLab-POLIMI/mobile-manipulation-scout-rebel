@@ -90,13 +90,14 @@ The task is divided into a series of steps:
 
 This repository contains the following packages:
 1. `client_demos`: ROS2 action clients handling requests to the action servers for mobile manipulation tasks
-2. `moveit2_servers`: ROS2 action server for button presser demo and the MoveIt2 high level APIs for arm planning and control
+2. `moveit2_api`: MoveIt2 high level APIs for arm planning and control, interaction with the planning scene and the environment
 3. `nav2_servers`: ROS2 action servers for autonomous navigation and environment perception with NAV2 commander APIs
 4. `multi_aruco_plane_detection`: source code for correcting the position and orientation estimates of multiple coplanar
    Aruco markers using data analysis and filtering techniques, robust to noise and outliers
 5. `mobile_manipulation_interfaces`: ROS2 custom actions and messages interfaces for mobile manipulation tasks
 6. `object_detection`: ROS2 wrapper of trained YOLOv8 model for object detection task, notebook and scripts for evaluation
-7. `soft_grasping`: ROS2 demo  and action servers for grasping objects with the soft gripper in an autonomous fashion
+7. `button_presser`: ROS2 demo and action servers for pressing buttons on a setup box with the end effector
+8. `soft_grasping`: ROS2 demo  and action servers for grasping objects with the soft gripper in an autonomous fashion
 
 ### 1. Package `client_demos`
 
@@ -109,18 +110,11 @@ running on the robot to perform the tasks autonomously. The action clients are w
 - `picking_action_server`: soft grasping action server for picking up objects with the soft gripper in the proximity of the robot arm
 - `dropping_action_server`: soft grasping action server for dropping objects with the soft gripper in the proximity of the robot arm
 
-### 2. Package `moveit2_servers`
+### 2. Package `moveit2_api`
 
 This package contains the MoveIt2 high-level APIs interface for planning and controlling the robot arm. It also provides functionalities
 to compute the inverse kinematics solutions for the robot arm and to execute the planned trajectories. It provides also
 other functions to compute the end effector target positions and orientations and interact with the MoveIt2 planning scene.
-
-This package contains the following action servers:
-- `button_presser_action_server`: action server for the button presser task, given that the button box is within reach of the robot arm
-- `button_finder_action_server`: action server for the button finder task, given that the robot arm must search for the button's box
-   location in the environment
-
-This package provides also the button presser stand-alone demo, which can be run independently from the rest of the system.
 
 ### 3. Package `nav2_servers`
 
@@ -158,7 +152,16 @@ This package contains the ROS2 wrapper of the trained YOLOv8 model for object de
 to load the trained model and to perform inference on the input images. The package provides also the notebook used for training the
 YOLOv8 model on the custom dataset and the scripts for visualization of the predictions with the bounding boxes and classes drawn on top.
 
-### 7. Package `soft_grasping`
+### 7. Package `button_presser`
+
+This package contains the following action servers:
+- `button_presser_action_server`: action server for the button presser task, given that the button box is within reach of the robot arm
+- `button_finder_action_server`: action server for the button finder task, given that the robot arm must search for the button's box
+   location in the environment
+
+This package provides also the button presser stand-alone demo, which can be run independently from the rest of the system.
+
+### 8. Package `soft_grasping`
 
 This package contains the ROS2 action servers for the soft grasping task. The package provides the functionalities to grasp objects
 with the soft gripper in an autonomous fashion. The package provides the action server for the picking task and the dropping task,
