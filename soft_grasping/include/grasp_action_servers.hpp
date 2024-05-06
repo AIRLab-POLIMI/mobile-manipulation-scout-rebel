@@ -17,6 +17,12 @@
 #include "mobile_manipulation_interfaces/action/dropping.hpp"
 #include "mobile_manipulation_interfaces/action/picking.hpp"
 
+// aruco markers message
+#include <aruco_interfaces/msg/aruco_markers.hpp>
+
+// C++ standard library imports
+#include <functional>
+
 namespace grasp_action_servers {
 
 class GraspActionServers : public rclcpp::Node {
@@ -71,6 +77,43 @@ public:
 	void execute_picking_callback(const std::shared_ptr<GoalHandlePicking> goal_handle);
 
 	/**
+	 * @brief generate a sequence of waypoints for the robot to follow, to search for objects in grasping range
+	 * @param reduced_range flag to reduce the search angle range
+	 * @return a vector of waypoints for the robot to follow in joint space
+	 */
+	std::vector<std::array<double, 6>> getSearchingWaypoints(bool reduced_range = false);
+
+	/**
+	 * @brief generate a sequence of waypoints for the robot to follow, to search aruco markers below the robot
+	 * @return a vector of waypoints for the robot to follow in joint space
+	*/
+	std::vector<std::array<double, 6>> getSearchingArucoWaypoints();
+
+	/**
+	 * @brief lookAroundForObjects function to look around for objects
+	 * @param waypoints the waypoints to look around for objects
+	 * @param output_pose the pose shared pointer to be returned, passed by reference
+	 * @return bool true if a valid object is found, false otherwise
+	 */
+	bool lookAroundFor(const std::vector<std::array<double, 6>> &waypoints,
+					   std::function<bool(geometry_msgs::msg::Pose::SharedPtr &)> functional_search,
+					   geometry_msgs::msg::Pose::SharedPtr &output_pose);
+
+	/**
+	 * @brief find an object in the reachable range to grasp, and check if there exists a valid grasping pose
+	 * @param grasping_pose the grasping pose shared pointer to be returned, passed by reference
+	 * @return bool true if a valid object is found, false otherwise
+	 */
+	bool findObjectToGrasp(geometry_msgs::msg::Pose::SharedPtr &grasping_pose);
+
+	/**
+	 * @brief execute the object picking action, given the computed grasping pose
+	 * @param grasping_pose the grasping pose to execute
+	 * @return bool true if the object is picked up successfully, false otherwise
+	 */
+	bool executeObjectPicking(geometry_msgs::msg::Pose::SharedPtr grasping_pose);
+
+	/**
 	 * @brief handle goal request for the object dropping action server
 	 * @param uuid the unique identifier of the goal request
 	 * @param goal the goal request object
@@ -99,33 +142,17 @@ public:
 	void execute_dropping_callback(const std::shared_ptr<GoalHandleDropping> goal_handle);
 
 	/**
-	 * @brief generate a sequence of waypoints for the robot to follow, to search for objects in reachable range to grasp
-	 * @return a vector of waypoints for the robot to follow in joint space
+	 * @brief check if the aruco reference marker is found in the camera view
+	 * @param aruco_ref_pose the aruco reference marker pose to be returned, passed by reference
+	 * @return bool true if the aruco reference marker is found, false otherwise
 	 */
-	std::vector<std::array<double, 6>> getLookingWaypointsSequence();
+	bool searchArucoMarker(geometry_msgs::msg::Pose::SharedPtr &aruco_ref_pose);
 
 	/**
-	 * @brief lookAroundForObjects function to look around for objects in the reachable range to grasp
-	 * @param waypoints the waypoints to look around for objects
-	 * @param grasping_pose the grasping pose shared pointer to be returned, passed by reference
-	 * @return bool true if a valid object is found, false otherwise
+	 * @brief aruco markers subscription callback
+	 * @param msg the aruco markers message
 	 */
-	bool lookAroundForObjects(const std::vector<std::array<double, 6>> &waypoints,
-							  geometry_msgs::msg::PoseStamped::SharedPtr &grasping_pose);
-
-	/**
-	 * @brief find an object in the reachable range to grasp, and check if there exists a valid grasping pose
-	 * @param grasping_pose the grasping pose shared pointer to be returned, passed by reference
-	 * @return bool true if a valid object is found, false otherwise
-	 */
-	bool findObjectToGrasp(geometry_msgs::msg::PoseStamped::SharedPtr &grasping_pose);
-
-	/**
-	 * @brief execute the object picking action, given the computed grasping pose
-	 * @param grasping_pose the grasping pose to execute
-	 * @return bool true if the object is picked up successfully, false otherwise
-	 */
-	bool executeObjectPicking(geometry_msgs::msg::PoseStamped::SharedPtr grasping_pose);
+	void arucoMarkersCallback(const aruco_interfaces::msg::ArucoMarkers::SharedPtr msg);
 
 private:
 	// action server object for ButtonPressAction
@@ -143,6 +170,17 @@ private:
 	std::array<double, 6> last_searched_pose = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
 	const std::array<double, 6> dropping_pose = {1.0, 0.5, 1.5, 0.0, 1.0, 0.0};
+
+	const int marker_id = 10;
+
+	// aruco markers subscriber
+	rclcpp::Subscription<aruco_interfaces::msg::ArucoMarkers>::SharedPtr aruco_markers_sub_;
+
+	geometry_msgs::msg::Pose aruco_marker_pose; // aruco markers message in camera rgb frame
+	bool aruco_marker_found = false;			// flag to check if the aruco marker is found
+
+	// aruco markers mutex
+	std::mutex aruco_markers_mutex_;
 
 	// logger
 	const rclcpp::Logger LOGGER = rclcpp::get_logger("soft_grasping::grasp_action_servers");

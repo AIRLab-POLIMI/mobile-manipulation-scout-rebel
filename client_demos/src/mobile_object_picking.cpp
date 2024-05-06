@@ -30,7 +30,7 @@ MobileObjectPicking::MobileObjectPicking(const rclcpp::NodeOptions &node_options
 
 	// Start main thread
 	// NOTE: choose which main function to execute for testing purposes
-	main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_picking, this));
+	main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_dropping, this));
 	main_thread_.detach();
 }
 

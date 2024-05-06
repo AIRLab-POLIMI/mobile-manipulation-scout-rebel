@@ -26,6 +26,7 @@ find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(mobile_manipulation_interfaces REQUIRED)
 find_package(igus_rebel_gripper_controller REQUIRED)
+find_package(aruco_interfaces REQUIRED)
 find_package(moveit2_api REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -80,7 +81,7 @@ add_executable(grasp_action_servers
 ament_target_dependencies(grasp_action_servers
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
 	std_msgs geometry_msgs 
-	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_api
+	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_api aruco_interfaces
 	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
 
 # ---------------------------------------------------------------

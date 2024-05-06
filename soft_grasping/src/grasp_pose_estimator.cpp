@@ -328,6 +328,99 @@ geometry_msgs::msg::PoseStamped GraspPoseEstimator::chooseGraspingPose(std::vect
 }
 
 /**
+ * @brief create random samples of dropping poses within the defined boundaries
+ *  The idea is that given a reference marker pose, signaling the position of the box to drop the ball,
+ *  the robot should move to a dropping pose in front of the reference marker pose, such that the ball
+ *  can be dropped inside the box.
+ * @param aruco_ref_pose_base aruco reference pose in the robot base frame
+ * @return valid motion plan to the dropping pose
+ */
+bool GraspPoseEstimator::moveToDroppingPose(geometry_msgs::msg::Pose aruco_ref_pose) {
+
+	// first transform the aruco reference pose to the robot base frame
+	geometry_msgs::msg::TransformStamped tf_camera_base = *moveit2_api_->getTFfromBaseToCamera();
+	geometry_msgs::msg::Pose aruco_ref_pose_base;
+	tf2::doTransform(aruco_ref_pose, aruco_ref_pose_base, tf_camera_base);
+
+	// create random samples of dropping poses within the defined boundaries
+	int n_samples = 30;
+
+	std::vector<geometry_msgs::msg::Pose> dropping_poses;
+
+	for (int i = 0; i < n_samples; i++) {
+		// sample distance from the aruco reference pose
+		float distance = min_distance + (max_distance - min_distance) * (rand() % 100) / 100.0;
+		// sample height from the aruco reference pose
+		float height = min_height + (max_height - min_height) * (rand() % 100) / 100.0;
+		// sample angle from the aruco reference pose
+		float angle = min_angle + (max_angle - min_angle) * (rand() % 100) / 100.0;
+
+		// compute the dropping pose
+		geometry_msgs::msg::Pose dropping_pose = computeDroppingPose(aruco_ref_pose_base, distance, height, angle);
+		dropping_poses.push_back(dropping_pose);
+	}
+
+	// for each dropping pose, check if the IK solution exists
+	geometry_msgs::msg::PoseStamped::SharedPtr chosen_dropping_pose = std::make_shared<geometry_msgs::msg::PoseStamped>();
+	for (auto dropping_pose : dropping_poses) {
+		// apply compensation to the dropping pose before checking the existance of an IK solution
+		geometry_msgs::msg::PoseStamped dropping_pose_stamped;
+		dropping_pose_stamped.header.frame_id = fixed_base_frame;
+		dropping_pose_stamped.header.stamp = this->now();
+		dropping_pose_stamped.pose = dropping_pose;
+		geometry_msgs::msg::PoseStamped::UniquePtr compensated_dropping_pose =
+			moveit2_api_->compensateTargetPose(dropping_pose_stamped);
+
+		// check if IK solution exists for the dropping pose
+		if (!moveit2_api_->checkIKSolution(compensated_dropping_pose->pose)) {
+			RCLCPP_INFO(logger_, "No IK solution found for dropping pose");
+			continue;
+		} else {
+			RCLCPP_INFO(logger_, "IK solution found for dropping pose");
+			*chosen_dropping_pose = dropping_pose_stamped;
+		}
+	}
+
+	// if the IK solution exists, move to the dropping pose
+	return moveit2_api_->robotPlanAndMove(chosen_dropping_pose);
+}
+
+/**
+ * @brief compute dropping pose, in the fixed base frame of reference
+ * 	The dropping pose is at \distance from the base, at \height from the base, and with a pitch \angle orientation
+ *  The dropping pose lies on the vertical plane passing between the base and the aruco reference pose
+ * @param aruco_ref_pose aruco reference pose in the robot base frame
+ * @param distance distance from the base
+ * @param height height from the base
+ * @param angle pitch orientation of the dropping pose
+ * @return geometry_msgs::msg::PoseStamped dropping pose
+ */
+geometry_msgs::msg::Pose GraspPoseEstimator::computeDroppingPose(geometry_msgs::msg::Pose aruco_ref_pose,
+																 float distance, float height, float angle) {
+	// create vector from the base to the aruco reference pose
+	Eigen::Vector3f v(aruco_ref_pose.position.x, aruco_ref_pose.position.y, 0.0);
+	Eigen::Vector3f v_drop = v.normalized() * distance;
+
+	// elevate the dropping point by height
+	v_drop.z() += height;
+
+	// compute orientation quaternion from the pitch angle
+	Eigen::Quaternionf q_drop(Eigen::AngleAxisf(angle, Eigen::Vector3f::UnitY()));
+
+	// fill the dropping pose
+	geometry_msgs::msg::Pose dropping_pose;
+	dropping_pose.position.x = v_drop.x();
+	dropping_pose.position.y = v_drop.y();
+	dropping_pose.position.z = v_drop.z();
+	dropping_pose.orientation.x = q_drop.x();
+	dropping_pose.orientation.y = q_drop.y();
+	dropping_pose.orientation.z = q_drop.z();
+	dropping_pose.orientation.w = q_drop.w();
+
+	return dropping_pose;
+}
+
+/**
  * @brief visualize point in rviz visual tools
  * @param point point to visualize
  * @param color color of the point

@@ -105,6 +105,29 @@ public:
 	geometry_msgs::msg::PoseStamped chooseGraspingPose(std::vector<geometry_msgs::msg::PoseStamped> poses);
 
 	/**
+	 * @brief create random samples of dropping poses within the defined boundaries
+	 *  The idea is that given a reference marker pose, signaling the position of the box to drop the ball,
+	 *  the robot should move to a dropping pose in front of the reference marker pose, such that the ball
+	 *  can be dropped inside the box.
+	 * @param aruco_ref_pose_base aruco reference pose in the robot base frame
+	 * @return valid motion plan to the dropping pose
+	 */
+	bool moveToDroppingPose(geometry_msgs::msg::Pose aruco_ref_pose);
+
+	/**
+	 * @brief compute dropping pose, in the fixed base frame of reference
+	 * 	The dropping pose is at \distance from the base, at \height from the base, and with a pitch \angle orientation
+	 *  The dropping pose lies on the vertical plane passing between the base and the aruco reference pose
+	 * @param aruco_ref_pose aruco reference pose in the robot base frame
+	 * @param distance distance from the base
+	 * @param height height from the base
+	 * @param angle pitch orientation of the dropping pose
+	 * @return geometry_msgs::msg::PoseStamped dropping pose
+	 */
+	geometry_msgs::msg::Pose computeDroppingPose(geometry_msgs::msg::Pose aruco_ref_pose,
+												 float distance, float height, float angle);
+
+	/**
 	 * @brief visualize point in rviz visual tools
 	 * @param point point to visualize
 	 * @param color color of the point
@@ -140,6 +163,10 @@ private:
 	const float grasping_distance = 0.04; // distance from the ball center to grasp pose
 	const float linear_motion = 0.05;	  // linear motion to approach the ball
 	const int n_grasp_sample_poses = 40;  // number of sampling grasping poses
+
+	const float min_distance = 0.1, max_distance = 0.3;			 // distance from the base to the dropping pose
+	const float min_height = 0.1, max_height = 0.5;				 // height from the base to the dropping pose
+	const float min_angle = -M_PI / 3.0, max_angle = M_PI / 3.0; // pitch orientation of the dropping pose
 };
 
 #endif // GRASP_POSE_ESTIMATOR_HPP

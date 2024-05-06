@@ -181,6 +181,26 @@ def generate_launch_description():
         }]
     )
 
+    # aruco pose estimation launch
+    aruco_pose_estimator_node = Node(
+        package='aruco_pose_estimation',
+        executable='aruco_node.py',
+        parameters=[{
+            "marker_size": 0.185,
+            "aruco_dictionary_id": "DICT_4X4_50",
+            "use_depth_input": False,
+            "image_topic": LaunchConfiguration('rgb_topic'),
+            "depth_image_topic": LaunchConfiguration('depth_topic'),
+            "camera_info_topic": LaunchConfiguration('camera_info_topic'),
+            "camera_frame": LaunchConfiguration('camera_rgb_frame'),
+            "detected_markers_topic": "/aruco/markers",
+            "markers_visualization_topic": "/aruco/poses",
+            "output_image_topic": "/aruco/image",
+        }],
+        output='screen',
+        emulate_tty=True
+    )
+
     return LaunchDescription(args + [
         # camera arguments
         rgb_topic_arg,
@@ -193,6 +213,7 @@ def generate_launch_description():
 
         # rviz2_node,
         robot_parking_action_server,
+        aruco_pose_estimator_node,
         picking_dropping_action_servers_node,
         mobile_object_picking_client_node]
     )
