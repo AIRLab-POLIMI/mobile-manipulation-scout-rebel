@@ -332,7 +332,7 @@ geometry_msgs::msg::PoseStamped GraspPoseEstimator::chooseGraspingPose(std::vect
  *  The idea is that given a reference marker pose, signaling the position of the box to drop the ball,
  *  the robot should move to a dropping pose in front of the reference marker pose, such that the ball
  *  can be dropped inside the box.
- * @param aruco_ref_pose_base aruco reference pose in the robot base frame
+ * @param aruco_ref_pose_base aruco reference pose in the camera frame
  * @return valid motion plan to the dropping pose
  */
 bool GraspPoseEstimator::moveToDroppingPose(geometry_msgs::msg::Pose aruco_ref_pose) {
@@ -343,13 +343,12 @@ bool GraspPoseEstimator::moveToDroppingPose(geometry_msgs::msg::Pose aruco_ref_p
 	tf2::doTransform(aruco_ref_pose, aruco_ref_pose_base, tf_camera_base);
 
 	// create random samples of dropping poses within the defined boundaries
-	int n_samples = 30;
-
+	int n_samples = 50;
 	std::vector<geometry_msgs::msg::Pose> dropping_poses;
 
 	for (int i = 0; i < n_samples; i++) {
 		// sample distance from the aruco reference pose
-		float distance = min_distance + (max_distance - min_distance) * (rand() % 100) / 100.0;
+		float distance = min_delta_distance + (max__delta_distance - min_delta_distance) * (rand() % 100) / 100.0;
 		// sample height from the aruco reference pose
 		float height = min_height + (max_height - min_height) * (rand() % 100) / 100.0;
 		// sample angle from the aruco reference pose
@@ -374,10 +373,10 @@ bool GraspPoseEstimator::moveToDroppingPose(geometry_msgs::msg::Pose aruco_ref_p
 		// check if IK solution exists for the dropping pose
 		if (!moveit2_api_->checkIKSolution(compensated_dropping_pose->pose)) {
 			RCLCPP_INFO(logger_, "No IK solution found for dropping pose");
-			continue;
 		} else {
 			RCLCPP_INFO(logger_, "IK solution found for dropping pose");
 			*chosen_dropping_pose = dropping_pose_stamped;
+			break;
 		}
 	}
 
@@ -387,31 +386,38 @@ bool GraspPoseEstimator::moveToDroppingPose(geometry_msgs::msg::Pose aruco_ref_p
 
 /**
  * @brief compute dropping pose, in the fixed base frame of reference
- * 	The dropping pose is at \distance from the base, at \height from the base, and with a pitch \angle orientation
+ * 	The dropping pose is at distance from the aruco, at height from the base, and with a pitch angle orientation
  *  The dropping pose lies on the vertical plane passing between the base and the aruco reference pose
  * @param aruco_ref_pose aruco reference pose in the robot base frame
- * @param distance distance from the base
+ * @param delta_distance distance from the aruco
  * @param height height from the base
  * @param angle pitch orientation of the dropping pose
  * @return geometry_msgs::msg::PoseStamped dropping pose
  */
 geometry_msgs::msg::Pose GraspPoseEstimator::computeDroppingPose(geometry_msgs::msg::Pose aruco_ref_pose,
-																 float distance, float height, float angle) {
+																 float delta_distance, float height, float angle) {
 	// create vector from the base to the aruco reference pose
 	Eigen::Vector3f v(aruco_ref_pose.position.x, aruco_ref_pose.position.y, 0.0);
-	Eigen::Vector3f v_drop = v.normalized() * distance;
+	float dist = v.norm();
+	Eigen::Vector3f v_drop = v.normalized() * (dist - delta_distance);
 
-	// elevate the dropping point by height
-	v_drop.z() += height;
+	// compute yaw angle from v_x vector to origin
+	float yaw = std::atan2(v_drop.y(), v_drop.x());
+	Eigen::Quaternionf q_drop(Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ()));
+	q_drop.normalize();
 
-	// compute orientation quaternion from the pitch angle
-	Eigen::Quaternionf q_drop(Eigen::AngleAxisf(angle, Eigen::Vector3f::UnitY()));
+	// get v_y vector by rotating y-axis by q_drop
+	Eigen::Vector3f v_y = q_drop * Eigen::Vector3f::UnitY();
+	Eigen::Quaternionf q_pitch(Eigen::AngleAxisf(angle, v_y));
+
+	// compose the final quaternion
+	q_drop = q_pitch * q_drop;
 
 	// fill the dropping pose
 	geometry_msgs::msg::Pose dropping_pose;
 	dropping_pose.position.x = v_drop.x();
 	dropping_pose.position.y = v_drop.y();
-	dropping_pose.position.z = v_drop.z();
+	dropping_pose.position.z = aruco_ref_pose.position.z + height; // elevate the dropping point by height
 	dropping_pose.orientation.x = q_drop.x();
 	dropping_pose.orientation.y = q_drop.y();
 	dropping_pose.orientation.z = q_drop.z();

@@ -109,7 +109,7 @@ void GraspActionServers::execute_picking_callback(const std::shared_ptr<GoalHand
 		goal_handle->publish_feedback(feedback);
 
 		// remove the collision walls from the planning scene so that the robot can move freely
-		moveit2_apis_->removeCollisionWalls();
+		//moveit2_apis_->removeCollisionWalls();
 
 		// if a valid object is found, execute the grasping action
 		// finally maintain the grip and park the robot arm
@@ -200,7 +200,7 @@ bool GraspActionServers::lookAroundFor(const std::vector<std::array<double, 6>> 
 	// if no valid object is found, return false
 
 	// add the collision walls to the planning scene
-	moveit2_apis_->addCollisionWallsToScene();
+	//moveit2_apis_->addCollisionWallsToScene();
 
 	int waypoints_size = (int)waypoints.size();
 	for (short i = 0; i < waypoints_size; i++) {
@@ -356,6 +356,10 @@ void GraspActionServers::handle_dropping_accepted(const std::shared_ptr<GoalHand
 void GraspActionServers::execute_dropping_callback(const std::shared_ptr<GoalHandleDropping> goal_handle) {
 	RCLCPP_INFO(LOGGER, "Executing dropping goal request");
 	const auto goal = goal_handle->get_goal();
+
+	// create subscription to aruco markers topic
+	aruco_markers_sub_ = this->create_subscription<aruco_interfaces::msg::ArucoMarkers>(
+		"/aruco/markers", 10, std::bind(&GraspActionServers::arucoMarkersCallback, this, std::placeholders::_1));
 
 	// first move to static search position, from the parking position
 	// grasp_pose_estimator_->moveToReadyPose();

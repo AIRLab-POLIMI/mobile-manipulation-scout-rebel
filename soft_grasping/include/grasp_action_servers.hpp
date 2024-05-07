@@ -169,6 +169,7 @@ private:
 	// last searching waypoint pose
 	std::array<double, 6> last_searched_pose = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
+	// static dropping pose not used anymore
 	const std::array<double, 6> dropping_pose = {1.0, 0.5, 1.5, 0.0, 1.0, 0.0};
 
 	const int marker_id = 10;

@@ -186,8 +186,8 @@ def generate_launch_description():
         package='aruco_pose_estimation',
         executable='aruco_node.py',
         parameters=[{
-            "marker_size": 0.185,
-            "aruco_dictionary_id": "DICT_4X4_50",
+            "marker_size": 0.095,
+            "aruco_dictionary_id": "DICT_7X7_50",
             "use_depth_input": False,
             "image_topic": LaunchConfiguration('rgb_topic'),
             "depth_image_topic": LaunchConfiguration('depth_topic'),

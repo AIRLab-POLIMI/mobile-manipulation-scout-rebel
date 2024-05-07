@@ -22,7 +22,7 @@
 #include <opencv2/opencv.hpp>
 
 // MoveIt2 custom APIs
-#include "moveit2_apis.hpp"
+#include <moveit2_apis.hpp>
 
 class BallPerception : public rclcpp::Node {
 public:
