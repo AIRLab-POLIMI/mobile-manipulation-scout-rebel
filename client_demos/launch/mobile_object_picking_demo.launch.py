@@ -215,5 +215,5 @@ def generate_launch_description():
         robot_parking_action_server,
         aruco_pose_estimator_node,
         picking_dropping_action_servers_node,
-        mobile_object_picking_client_node]
-    )
+        mobile_object_picking_client_node
+    ])

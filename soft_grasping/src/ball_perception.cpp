@@ -176,6 +176,9 @@ void BallPerception::saveDepthMap() {
 	// save depth map
 	{ // acquire lock on depth map
 		std::lock_guard<std::mutex> lock(depth_map_mutex);
+		if (depth_map->empty()) {
+			return;
+		}
 		depth_map->copyTo(*depth_map_saved);
 	}
 }
@@ -187,6 +190,9 @@ void BallPerception::saveRGBDepth() {
 	// save rgb image
 	{
 		std::lock_guard<std::mutex> lock(rgb_image_mutex);
+		if (rgb_image->empty()) {
+			return;
+		}
 		rgb_image->copyTo(*rgb_image_saved);
 	}
 

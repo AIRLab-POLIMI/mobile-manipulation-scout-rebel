@@ -30,7 +30,7 @@ MobileObjectPicking::MobileObjectPicking(const rclcpp::NodeOptions &node_options
 
 	// Start main thread
 	// NOTE: choose which main function to execute for testing purposes
-	main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_dropping, this));
+	main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_demo, this));
 	main_thread_.detach();
 }
 
@@ -194,7 +194,7 @@ void MobileObjectPicking::main_thread_demo(void) {
 		picker_result = future_picker_result.get();
 		if (picker_result.code != rclcpp_action::ResultCode::SUCCEEDED) {
 			RCLCPP_ERROR(logger_, "Picking Goal failed");
-			return;
+			continue; // try again
 		}
 		// if picking was not successful because no objects were found, then move to the next waypoint
 		if (!this->objects_remaining_) {

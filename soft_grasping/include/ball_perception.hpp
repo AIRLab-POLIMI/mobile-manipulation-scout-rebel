@@ -271,7 +271,7 @@ private:
 	// red ball color mask using HSV color space
 	const color_mask red_ball_mask = {
 		// min_hue, max_hue, min_saturation, max_saturation, min_value, max_value
-		0, 20, 0, 255, 0, 255};
+		0, 30, 0, 255, 0, 255};
 
 	// green ball color mask using HSV color space
 	const color_mask green_ball_mask = {

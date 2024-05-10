@@ -90,7 +90,7 @@ public:
 	std::vector<std::array<double, 6>> getSearchingArucoWaypoints();
 
 	/**
-	 * @brief lookAroundForObjects function to look around for objects
+	 * @brief looks around searching for something: uses functional programming
 	 * @param waypoints the waypoints to look around for objects
 	 * @param output_pose the pose shared pointer to be returned, passed by reference
 	 * @return bool true if a valid object is found, false otherwise

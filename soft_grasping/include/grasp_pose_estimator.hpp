@@ -163,8 +163,8 @@ private:
 	const float linear_motion = 0.05;	  // linear motion to approach the ball
 	const int n_grasp_sample_poses = 40;  // number of sampling grasping poses
 
-	const float min_delta_distance = 0.05, max__delta_distance = 0.20; // distance from the base to the dropping pose
-	const float min_height = 0.1, max_height = 0.3;					   // height from the base to the dropping pose
+	const float min_delta_distance = 0.1, max__delta_distance = 0.20; // distance from the base to the dropping pose
+	const float min_height = 0.05, max_height = 0.3;					   // height from the base to the dropping pose
 	const float min_angle = 0.0, max_angle = M_PI / 2.0;			   // pitch orientation of the dropping pose
 };
 

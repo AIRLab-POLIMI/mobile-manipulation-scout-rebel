@@ -109,18 +109,23 @@ void GraspActionServers::execute_picking_callback(const std::shared_ptr<GoalHand
 		goal_handle->publish_feedback(feedback);
 
 		// remove the collision walls from the planning scene so that the robot can move freely
-		//moveit2_apis_->removeCollisionWalls();
+		// moveit2_apis_->removeCollisionWalls();
 
 		// if a valid object is found, execute the grasping action
 		// finally maintain the grip and park the robot arm
 		// if the object is picked up successfully, complete the picking action
 		bool object_picked = executeObjectPicking(grasping_pose);
 
-		if (object_picked) {
-			feedback->status = "Object picked up successfully!";
-		} else {
+		if (!object_picked) {
 			feedback->status = "Failed to complete sequence of movements to pick up the object";
+			goal_handle->publish_feedback(feedback);
+			auto result = std::make_shared<PickingAction::Result>();
+			goal_handle->abort(result);
+			return;
 		}
+
+		// successfully picked up the object
+		feedback->status = "Object picked up successfully!";
 		goal_handle->publish_feedback(feedback);
 
 		// succeed the goal
@@ -146,39 +151,39 @@ std::vector<std::array<double, 6>> GraspActionServers::getSearchingWaypoints(boo
 
 	// apply reduced range of motion if required
 	if (reduced_range) {
-		range_max = 2.0 / 3.0 * M_PI;
-		range_min = 0.0;
+		range_max = M_PI / 2.0;
+		range_min = M_PI / 6.0;
 	}
 
 	std::vector<std::array<double, 6>> waypoints;
 
 	// first layer of waypoints: camera facing forward --> suitable for searching distant aruco markers
 	for (float i = range_min; i <= range_max; i += 0.2) {
-		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 75.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
+		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 85.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
 	// second layer of waypoints: camera facing slighly downwards --> suitable for searching close aruco markers
 	for (float i = range_max; i >= range_min; i -= 0.2) {
-		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 85.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
+		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 95.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
 	// third layer of waypoints: camera facing downwards --> suitable for searching interactible aruco markers
 	for (float i = range_min; i <= range_max; i += 0.2) {
-		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 95.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
+		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 110.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
 	// repeat second layer of waypoints
 	for (float i = range_max; i >= range_min; i -= 0.2) {
-		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 85.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
+		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 95.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
 	// repeat first layer of waypoints
 	for (float i = range_min; i <= range_max; i += 0.2) {
-		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 75.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
+		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 85.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 
@@ -186,7 +191,7 @@ std::vector<std::array<double, 6>> GraspActionServers::getSearchingWaypoints(boo
 }
 
 /**
- * @brief lookAroundForObjects function to look around for objects
+ * @brief looks around searching for something: uses functional programming
  * @param waypoints the waypoints to look around for objects
  * @param output_pose the posestamped shared pointer to be returned, passed by reference
  * @return bool true if a valid object is found, false otherwise
@@ -200,7 +205,7 @@ bool GraspActionServers::lookAroundFor(const std::vector<std::array<double, 6>> 
 	// if no valid object is found, return false
 
 	// add the collision walls to the planning scene
-	//moveit2_apis_->addCollisionWallsToScene();
+	// moveit2_apis_->addCollisionWallsToScene();
 
 	int waypoints_size = (int)waypoints.size();
 	for (short i = 0; i < waypoints_size; i++) {
@@ -310,10 +315,7 @@ bool GraspActionServers::executeObjectPicking(geometry_msgs::msg::Pose::SharedPt
 	moveit2_apis_->robotPlanAndMove(last_searched_pose);
 
 	// move to parked position
-	moveit2_apis_->addCollisionWallsToScene();
-	// TODO: enable this line when robot is loaded on mobile robot base
-	// moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
-	moveit2_apis_->removeCollisionWalls();
+	moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
 	return picking_success;
 }
 
@@ -375,6 +377,10 @@ void GraspActionServers::execute_dropping_callback(const std::shared_ptr<GoalHan
 									 std::bind(&GraspActionServers::searchArucoMarker, this, std::placeholders::_1),
 									 aruco_pose);
 
+	// reset aruco marker search for next iteration
+	aruco_marker_found = false;
+	aruco_markers_sub_.reset();
+
 	// compute the dropping pose given the aruco reference marker pose
 	if (!aruco_found) {
 		RCLCPP_ERROR(LOGGER, "Aruco marker not found in the camera view");
@@ -403,8 +409,8 @@ void GraspActionServers::execute_dropping_callback(const std::shared_ptr<GoalHan
 	}
 
 	feedback->status = "Dropping pose computed successfully. Dropping the object.";
-	goal_handle->publish_feedback(feedback);	
-	
+	goal_handle->publish_feedback(feedback);
+
 	// release the gripper, then off
 	moveit2_apis_->pump_release();
 	moveit2_apis_->pump_off();
@@ -413,11 +419,8 @@ void GraspActionServers::execute_dropping_callback(const std::shared_ptr<GoalHan
 	grasp_pose_estimator_->moveToReadyPose();
 
 	// move back to parked position
-	moveit2_apis_->addCollisionWallsToScene();
-	// TODO: enable this line when robot is loaded on mobile robot base
-	// moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
-	moveit2_apis_->removeCollisionWalls();
-
+	moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
+	
 	// succeed the goal
 	auto result = std::make_shared<DroppingAction::Result>();
 	goal_handle->succeed(result);
@@ -426,7 +429,7 @@ void GraspActionServers::execute_dropping_callback(const std::shared_ptr<GoalHan
 /**
  * @brief generate a sequence of waypoints for the robot to follow, to search for aruco markers
  * @return a vector of waypoints for the robot to follow in joint space
-*/
+ */
 std::vector<std::array<double, 6>> GraspActionServers::getSearchingArucoWaypoints() {
 	// generate waypoints for the robot to follow in joint space
 	// the robot will look around in the reachable range to find aruco markers
@@ -500,7 +503,6 @@ void GraspActionServers::arucoMarkersCallback(const aruco_interfaces::msg::Aruco
 		aruco_marker_pose = msg->poses[0];
 		aruco_marker_found = true;
 	}
-	
 }
 
 int main(int argc, char **argv) {

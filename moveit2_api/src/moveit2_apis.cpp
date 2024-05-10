@@ -442,7 +442,7 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
 
 	if (!checkIKSolution(compensated_target_pose->pose)) {
 		RCLCPP_ERROR(LOGGER, "No valid IK solution for the target pose");
-		return false;
+		//return false;
 	}
 
 	// publish a coordinate axis corresponding to the pose with rviz visual tools
@@ -732,8 +732,8 @@ bool MoveIt2APIs::checkIKSolution(geometry_msgs::msg::Pose pose) {
 	moveit_msgs::msg::MoveItErrorCodes error_codes;
 	bool valid = false;
 	int attempts = 0;
-	while (!valid && attempts < 10) {
-		valid = kinematics_solver->searchPositionIK(pose, seed_joint_values, 0.01, ik_solution, error_codes);
+	while (!valid && attempts < n_max_retries) {
+		valid = kinematics_solver->searchPositionIK(pose, seed_joint_values, 0.005, ik_solution, error_codes);
 		attempts++;
 	}
 	return valid;

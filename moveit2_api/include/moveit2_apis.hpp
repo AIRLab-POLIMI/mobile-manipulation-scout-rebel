@@ -77,7 +77,7 @@ private:
 	const float timeout_seconds = 1.0;
 
 	// parameters for linear planning movement in cartesian path
-	const double jump_threshold = 0.0; // 0.0 disables jump threshold
+	const double jump_threshold = 0.1; // 0.0 disables jump threshold
 	const double eef_step = 0.005;	   // interpolation resolution for linear path planning
 	const double max_step = 0.05;	   // maximum distance between consecutive waypoints
 

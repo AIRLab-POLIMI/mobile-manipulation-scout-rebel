@@ -343,10 +343,9 @@ bool GraspPoseEstimator::moveToDroppingPose(geometry_msgs::msg::Pose aruco_ref_p
 	tf2::doTransform(aruco_ref_pose, aruco_ref_pose_base, tf_camera_base);
 
 	// create random samples of dropping poses within the defined boundaries
-	int n_samples = 50;
 	std::vector<geometry_msgs::msg::Pose> dropping_poses;
 
-	for (int i = 0; i < n_samples; i++) {
+	for (int i = 0; i < n_grasp_sample_poses; i++) {
 		// sample distance from the aruco reference pose
 		float distance = min_delta_distance + (max__delta_distance - min_delta_distance) * (rand() % 100) / 100.0;
 		// sample height from the aruco reference pose
