@@ -27,7 +27,7 @@ from cv_bridge import CvBridge
 # Tensorflow imports
 import tensorflow as tf
 import keras
-from keras_cv.models import object_detection
+from keras_cv import losses
 
 # python imports
 import threading
@@ -38,11 +38,12 @@ import numpy as np
 class BallDetector(Node):
 
     TEXT_COLOR = (255, 255, 255)  # White
-    COLOR_MAPPING = {
-        0: (255, 0, 0),  # blue
-        1: (0, 255, 0),  # green
-        2: (0, 0, 255),  # red
-        3: (0, 250, 255),  # yellow
+    COLOR_MAPPING = { # BGR color mapping
+        0: (0, 165, 255),  # apple
+        1: (255, 0, 0),  # blue
+        2: (0, 255, 0),  # green
+        3: (0, 0, 255),  # red
+        4: (0, 250, 255),  # yellow
     }
 
     def __init__(self):
@@ -89,10 +90,11 @@ class BallDetector(Node):
     def load_model_inference(self):
         # class mapping = dictionary from class index to class name
         self.class_mapping = {
-            0: "blue_ball",
-            1: "green_ball",
-            2: "red_ball",
-            3: "yellow_ball"
+            0: "apple",
+            1: "blue_ball",
+            2: "green_ball",
+            3: "red_ball",
+            4: "yellow_ball"
         }
 
         # print the tensorflow version and the available GPU devices
@@ -104,13 +106,21 @@ class BallDetector(Node):
         self.model_path = os.path.join(
             get_package_share_directory("object_detection"),
             "models",
-            "yolov8s_600_v2.keras"
+            "yolov8s_1000.keras"
         )
         self.yolo_model = tf.keras.models.load_model(self.model_path)
         self.get_logger().info("Model loaded successfully!")
+
+        ciou_loss = losses.CIoULoss(bounding_box_format="xywh", reduction="sum")
+        bcered_loss = losses.BinaryPenaltyReducedFocalCrossEntropy(
+            from_logits=False,
+            positive_threshold=0.7,
+            reduction="sum"
+        )
+
         self.yolo_model.compile(
-            classification_loss="binary_crossentropy",  # multi-hot encoded labels require this loss function
-            box_loss="ciou",  # complete intersection over union
+            classification_loss=bcered_loss,  # multi-hot encoded labels require this loss function
+            box_loss=ciou_loss,  # complete intersection over union
             # disable just in time compilation with XLA for compatibility issues using GPU acceleration during training,
             # due to CombinedNonMaxSuppression op not currently supported by tensorflow
             jit_compile=False
@@ -150,8 +160,8 @@ class BallDetector(Node):
 
                 # publish the detected object coordinates
                 object_detections = ObjectDetections()
-                object_detections.header.stamp = self.get_clock().now().to_msg() # current time
-                object_detections.header.frame_id = "camera_link" # not actually used
+                object_detections.header.stamp = self.get_clock().now().to_msg()  # current time
+                object_detections.header.frame_id = "camera_link"  # not actually used
                 # linearize the bounding boxes vector
                 # and store the detected object coordinates with their respective class labels
                 object_detections.bounding_boxes = bboxes.flatten().tolist()

@@ -3,7 +3,7 @@
 
 /**
  * @brief Constructor for GraspPoseEstimator class
- *      subscribes to /object_coords topic to receive object coordinates from object detection node
+ *      subscribes to /object_coords topic to receive ball coordinates from user input click
  *      publishes estimated grasp pose to /grasp_pose topic
  * @param node_options options for the node, given by the launch file
  */
@@ -20,22 +20,22 @@ GraspWithClick::GraspWithClick(std::shared_ptr<GraspPoseEstimator> grasp_pose_es
 }
 
 /**
- * @brief Callback function for receiving object coordinates from /object_coords topic
- * 		updates the object coordinates for the main thread to estimate the grasp pose
+ * @brief Callback function for receiving ball coordinates from /object_coords topic
+ * 		updates the ball coordinates for the main thread to estimate the grasp pose
  * @param msg object coordinates message
  */
 void GraspWithClick::object_coords_callback(const mobile_manipulation_interfaces::msg::ObjectCoords::SharedPtr msg) {
-	// log object coordinates
+	// save ball coordinates
 	{
 		std::lock_guard<std::mutex> lock(object_coords_mutex);
-		object_x = msg->x;
-		object_y = msg->y;
+		ball_x = msg->x;
+		ball_y = msg->y;
 	}
 }
 
 /**
  * @brief Main thread function for the GraspPoseEstimator node
- * 	This thread uses object pixel coordinates and estimates the grasping pose from the clicked point
+ * 	This thread uses ball pixel coordinates and estimates the grasping pose from the clicked point
  * 	then executes the demo
  */
 void GraspWithClick::mainThreadWithCoordinates() {
@@ -58,7 +58,7 @@ void GraspWithClick::mainThreadWithCoordinates() {
 			continue;
 		}
 
-		RCLCPP_INFO(logger_, "Estimating grasp pose for object at pixel coordinates: x=%d, y=%d", x, y);
+		RCLCPP_INFO(logger_, "Estimating grasp pose for ball at pixel coordinates: x=%d, y=%d", x, y);
 
 		// compute 3D point in the camera frame from the pixel coordinates
 		geometry_msgs::msg::Point p_closest = ball_perception->computePointCloud(x, y);
@@ -67,9 +67,9 @@ void GraspWithClick::mainThreadWithCoordinates() {
 		// compute the center of the ball given the closest point to the camera
 		geometry_msgs::msg::Point ball_center = grasp_pose_estimator->computeBallCenter(p_closest);
 
-		// estimate the grasp pose from the object surface point
+		// estimate the grasp pose from the ball surface point
 		geometry_msgs::msg::PoseStamped grasp_pose;
-		bool valid_grasp = grasp_pose_estimator->estimateGraspingPose(ball_center, grasp_pose);
+		bool valid_grasp = grasp_pose_estimator->estimateGraspingPose(ball_center, grasp_pose, 0.04);
 
 		// empty grasp pose, wait for new input
 		if (!valid_grasp) {
@@ -103,23 +103,23 @@ void GraspWithClick::mainThreadWithCoordinates() {
  */
 bool GraspWithClick::acquireDepthData(unsigned short &x, unsigned short &y) {
 	int x_temp = 0, y_temp = 0;
-	// save object center pixel coordinates
-	{ // acquire lock on object pixel coordinates
+	// save ball center pixel coordinates
+	{ // acquire lock on ball pixel coordinates
 		std::lock_guard<std::mutex> lock(object_coords_mutex);
-		if (object_x != 0 && object_y != 0) {
-			x_temp = object_x;
-			y_temp = object_y;
+		if (ball_x != 0 && ball_y != 0) {
+			x_temp = ball_x;
+			y_temp = ball_y;
 		}
 	}
 
-	// if object coordinates are not received, wait for the next iteration
+	// if ball coordinates are not received, wait for the next iteration
 	if (x_temp == 0 && y_temp == 0) {
 		return false;
 	} else if (x_temp == x && y_temp == y) {
-		// if the object coordinates are the same as the previous iteration, wait for the next iteration
+		// if the ball coordinates are the same as the previous iteration, wait for the next iteration
 		return false;
 	} else {
-		// update the object coordinates
+		// update the ball coordinates
 		x = x_temp;
 		y = y_temp;
 	}

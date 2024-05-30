@@ -85,7 +85,7 @@ void GraspActionServers::execute_picking_callback(const std::shared_ptr<GoalHand
 	std::shared_ptr<geometry_msgs::msg::Pose> grasping_pose;
 
 	// find an object in the reachable range to grasp, and check if there exists a valid grasping pose
-	bool valid_object = lookAroundFor(getSearchingWaypoints(true),
+	bool valid_object = lookAroundFor(getSearchingWaypoints(false),
 									  std::bind(&GraspActionServers::findObjectToGrasp, this, std::placeholders::_1),
 									  grasping_pose);
 
@@ -268,9 +268,11 @@ bool GraspActionServers::findObjectToGrasp(geometry_msgs::msg::Pose::SharedPtr &
 	}
 	RCLCPP_INFO(LOGGER, "Selected object detection");
 
+	float obj_radius = grasp_pose_estimator_->getObjectRadius(obj_selected->label);
+
 	// from the filtered and segmented pointcloud, estimate the point on the object surface
 	geometry_msgs::msg::Point p_center;
-	bool valid_center = grasp_autonomous_->estimateSphereCenterFromSurfacePointcloud(segmented_pointcloud, p_center);
+	bool valid_center = grasp_autonomous_->estimateSphereCenterFromSurfacePointcloud(segmented_pointcloud, p_center, obj_radius);
 	if (!valid_center) {
 		return false;
 	}
@@ -278,9 +280,11 @@ bool GraspActionServers::findObjectToGrasp(geometry_msgs::msg::Pose::SharedPtr &
 	RCLCPP_INFO(LOGGER, "Estimated object center point");
 	grasp_pose_estimator_->visualizePoint(p_center, rviz_visual_tools::ORANGE);
 
+	float grasping_distance = grasp_pose_estimator_->getObjectGraspingDistance(obj_selected->label);
+
 	// estimate the grasp pose from the object surface point
 	geometry_msgs::msg::PoseStamped grasp_pose;
-	bool valid_grasp = grasp_pose_estimator_->estimateGraspingPose(p_center, grasp_pose);
+	bool valid_grasp = grasp_pose_estimator_->estimateGraspingPose(p_center, grasp_pose, grasping_distance);
 
 	// empty grasp pose, wait for new input
 	if (!valid_grasp) {

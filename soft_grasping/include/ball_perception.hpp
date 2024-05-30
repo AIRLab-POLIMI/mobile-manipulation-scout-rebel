@@ -47,10 +47,11 @@ public:
 
 	// class mapping for object detection labels
 	const std::map<uint16_t, std::string> class_mapping = {
-		{0, "blue_ball"},
-		{1, "red_ball"},
+		{0, "apple"},
+		{1, "blue_ball"},
 		{2, "green_ball"},
-		{3, "yellow_ball"},
+		{3, "red_ball"},
+		{4, "yellow_ball"},
 	};
 
 	/**
@@ -271,7 +272,7 @@ private:
 	// red ball color mask using HSV color space
 	const color_mask red_ball_mask = {
 		// min_hue, max_hue, min_saturation, max_saturation, min_value, max_value
-		0, 30, 0, 255, 0, 255};
+		0, 20, 0, 255, 0, 255};
 
 	// green ball color mask using HSV color space
 	const color_mask green_ball_mask = {
@@ -287,6 +288,20 @@ private:
 	const color_mask yellow_ball_mask = {
 		// min_hue, max_hue, min_saturation, max_saturation, min_value, max_value
 		20, 40, 0, 255, 0, 255};
+
+	// apple color mask using HSV color space
+	const color_mask apple_mask = {
+		// min_hue, max_hue, min_saturation, max_saturation, min_value, max_value
+		0, 30, 0, 255, 0, 255};
+	
+	// create mapping from label to color mask
+	std::map<uint16_t, color_mask> label_color_mask = {
+		{0, apple_mask},
+		{1, blue_ball_mask},
+		{2, green_ball_mask},
+		{3, red_ball_mask},
+		{4, yellow_ball_mask},
+	};
 };
 
 #endif // BALL_PERCEPTION_HPP

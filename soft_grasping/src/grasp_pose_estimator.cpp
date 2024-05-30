@@ -137,13 +137,15 @@ bool GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr 
  * @brief Estimates the grasp pose for the object at the given coordinates
  * @param ball_center estimated center of the ball, in the camera frame of reference
  * @param grasp_pose the estimated grasp pose, to be returned, passed by reference
+ * @param grasping_distance distance from the ball center to the grasp pose
  * @return true if the grasp pose was estimated successfully, false otherwise
  */
 bool GraspPoseEstimator::estimateGraspingPose(geometry_msgs::msg::Point ball_center,
-											  geometry_msgs::msg::PoseStamped &grasp_pose) {
+											  geometry_msgs::msg::PoseStamped &grasp_pose,
+											  float grasping_distance) {
 
 	// compute the grasp pose from the center of the ball
-	auto grasp_sample_poses = generateSamplingGraspingPoses(ball_center);
+	auto grasp_sample_poses = generateSamplingGraspingPoses(ball_center, grasping_distance);
 	visualizePoses(grasp_sample_poses);
 
 	visual_tools_->deleteAllMarkers();
@@ -184,11 +186,12 @@ geometry_msgs::msg::Point GraspPoseEstimator::computeBallCenter(geometry_msgs::m
 
 /**
  * @brief Generate sampling grasping poses around the ball center
- * @param ball_center estimated center of the ball, in the camera frame of reference
+ * @param ball_center estimated center of the ball, in the camera frame of referenceù
+ * @param grasping_distance distance from the ball center to the grasp pose
  * @return std::vector<geometry_msgs::msg::PoseStamped> sampling grasping poses
  */
 std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplingGraspingPoses(
-	geometry_msgs::msg::Point ball_center) {
+	geometry_msgs::msg::Point ball_center, float grasping_distance) {
 	// generate sampling grasping poses around the ball center
 	std::vector<geometry_msgs::msg::PoseStamped> grasping_poses;
 
@@ -214,7 +217,7 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
 		// angle sampled from theta_min to theta_max
 		float theta = theta_min + i * (theta_max - theta_min) / (n_grasp_sample_poses - 1);
 		// compute the grasping pose at given theta angle
-		geometry_msgs::msg::PoseStamped grasp_pose = computeGraspingPose(ball_center_base, theta);
+		geometry_msgs::msg::PoseStamped grasp_pose = computeGraspingPose(ball_center_base, theta, grasping_distance);
 
 		// apply compensation to the grasping pose
 		geometry_msgs::msg::PoseStamped::UniquePtr compensated_grasp_pose =
@@ -258,7 +261,8 @@ std::vector<geometry_msgs::msg::PoseStamped> GraspPoseEstimator::generateSamplin
  * @return geometry_msgs::msg::PoseStamped grasping pose
  */
 geometry_msgs::msg::PoseStamped GraspPoseEstimator::computeGraspingPose(geometry_msgs::msg::Point ball_center,
-																		float theta) {
+																		float theta,
+																		float grasping_distance) {
 	// generate first sampling pose
 	geometry_msgs::msg::PoseStamped grasp_pose;
 	grasp_pose.header.frame_id = fixed_base_frame;
@@ -423,6 +427,24 @@ geometry_msgs::msg::Pose GraspPoseEstimator::computeDroppingPose(geometry_msgs::
 	dropping_pose.orientation.w = q_drop.w();
 
 	return dropping_pose;
+}
+
+/**
+ * @brief get object radius from its label
+ * @param label object label
+ * @return float object radius
+ */
+float GraspPoseEstimator::getObjectRadius(int label) {
+	return label_to_radius_grasp.at(label).first;
+}
+
+/**
+ * @brief get object grasping distance from its label
+ * @param label object label
+ * @return float object grasping distance
+ */
+float GraspPoseEstimator::getObjectGraspingDistance(int label) {
+	return label_to_radius_grasp.at(label).second;
 }
 
 /**

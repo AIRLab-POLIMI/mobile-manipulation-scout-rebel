@@ -72,7 +72,7 @@ public:
 
 	/**
 	 * @brief save RGB and depth data from the ball perception node
-	*/
+	 */
 	void saveRGBandDepthData();
 
 	/**
@@ -93,10 +93,12 @@ public:
 	 *  by trying to fit the points to a sphere model using RANSAC algorithm
 	 * @param pcl::PointCloud<pcl::PointXYZ>::Ptr the segmented pointcloud data
 	 * @param sphere_center Point: the estimated center point of the sphere passed by reference
+	 * @param sphere_radius float: the known radius of the sphere
 	 * @return bool: true if the sphere center is estimated successfully, false if not
 	 */
 	bool estimateSphereCenterFromSurfacePointcloud(pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pointcloud,
-												   geometry_msgs::msg::Point &sphere_center);
+												   geometry_msgs::msg::Point &sphere_center,
+												   float sphere_radius);
 };
 
 #endif // GRASP_AUTONOMOUS_HPP

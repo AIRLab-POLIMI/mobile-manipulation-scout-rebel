@@ -41,7 +41,7 @@ class DatasetCollector(Node):
 
         # Initialize image counting and saving directory
         self.image_count = 0
-        self.save_directory = '/home/simongiampa/dataset/'  # Folder to save images
+        self.save_directory = '/home/simongiampa/dataset_apples/'  # Folder to save images
         os.makedirs(self.save_directory, exist_ok=True)  # Create if doesn't exist
 
         # Find the last image index

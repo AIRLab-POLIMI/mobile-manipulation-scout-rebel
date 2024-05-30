@@ -98,9 +98,11 @@ void GraspAutonomous::mainThreadWithObjectDetections() {
 		}
 		RCLCPP_INFO(logger_, "Selected object detection");
 
+		float obj_radius = grasp_pose_estimator->getObjectRadius(obj_selected->label);
+
 		// from the filtered and segmented pointcloud, estimate the point on the object surface
 		geometry_msgs::msg::Point p_center;
-		bool valid_center = estimateSphereCenterFromSurfacePointcloud(segmented_pointcloud, p_center);
+		bool valid_center = estimateSphereCenterFromSurfacePointcloud(segmented_pointcloud, p_center, obj_radius);
 		if (!valid_center) {
 			rate.sleep();
 			continue;
@@ -109,9 +111,11 @@ void GraspAutonomous::mainThreadWithObjectDetections() {
 		RCLCPP_INFO(logger_, "Estimated object center point");
 		grasp_pose_estimator->visualizePoint(p_center, rviz_visual_tools::ORANGE);
 
+		float grasping_distance = grasp_pose_estimator->getObjectGraspingDistance(obj_selected->label);
+
 		// estimate the grasp pose from the object surface point
 		geometry_msgs::msg::PoseStamped grasp_pose;
-		bool valid_grasp = grasp_pose_estimator->estimateGraspingPose(p_center, grasp_pose);
+		bool valid_grasp = grasp_pose_estimator->estimateGraspingPose(p_center, grasp_pose, grasping_distance);
 
 		// empty grasp pose, wait for new input
 		if (!valid_grasp) {
@@ -272,10 +276,13 @@ bool GraspAutonomous::selectObjectPointcloud(
  *  by trying to fit the points to a sphere model using RANSAC algorithm
  * @param pcl::PointCloud<pcl::PointXYZ>::Ptr the segmented pointcloud data
  * @param sphere_center Point: the estimated center point of the sphere passed by reference
+ * @param sphere_radius float: the known radius of the sphere
  * @return bool: true if the sphere center is estimated successfully, false if not
  */
 bool GraspAutonomous::estimateSphereCenterFromSurfacePointcloud(pcl::PointCloud<pcl::PointXYZ>::Ptr segmented_pointcloud,
-																geometry_msgs::msg::Point &sphere_center) {
+																geometry_msgs::msg::Point &sphere_center,
+																float sphere_radius) {
+	float radius_min = sphere_radius - 0.005, radius_max = sphere_radius + 0.005;
 	// use pcl SACSegmentation to fit the points to a sphere model using RANSAC algorithm
 	pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
 	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
@@ -285,7 +292,7 @@ bool GraspAutonomous::estimateSphereCenterFromSurfacePointcloud(pcl::PointCloud<
 	seg.setMethodType(pcl::SAC_MLESAC);
 	seg.setDistanceThreshold(0.01);
 	seg.setMaxIterations(1000);
-	seg.setRadiusLimits(0.028, 0.032);
+	seg.setRadiusLimits(radius_min, radius_max);
 	seg.setInputCloud(segmented_pointcloud);
 	seg.segment(*inliers, *coefficients);
 

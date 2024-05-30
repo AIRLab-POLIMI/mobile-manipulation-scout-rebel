@@ -415,18 +415,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr BallPerception::filterPointCloudByColor(pcl:
  * @return the color mask for the object detection class label
  */
 BallPerception::color_mask BallPerception::getColorMask(uint16_t label) {
-	switch (label) {
-	case 0: // blue
-		return blue_ball_mask;
-	case 1: // green
-		return green_ball_mask;
-	case 2: // red
-		return red_ball_mask;
-	case 3: // yellow
-		return yellow_ball_mask;
-	default:
-		return blue_ball_mask; // never called
-	}
+	return label_color_mask.at(label);
 }
 
 /**

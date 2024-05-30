@@ -69,10 +69,12 @@ public:
 	 * @brief Estimates the grasp pose for the object at the given coordinates
 	 * @param ball_center estimated center of the ball, in the camera frame of reference
 	 * @param grasp_pose the estimated grasp pose, to be returned, passed by reference
+	 * @param grasping_distance distance from the ball center to the grasp pose
 	 * @return true if the grasp pose was estimated successfully, false otherwise
 	 */
 	bool estimateGraspingPose(geometry_msgs::msg::Point ball_center,
-							  geometry_msgs::msg::PoseStamped &grasp_pose);
+							  geometry_msgs::msg::PoseStamped &grasp_pose,
+							  float grasping_distance);
 
 	/**
 	 * @brief Computes the center of the ball given the closest point to the camera
@@ -84,9 +86,11 @@ public:
 	/**
 	 * @brief Generate sampling grasping poses around the ball center
 	 * @param ball_center estimated center of the ball
+	 * @param grasping_distance distance from the ball center to the grasp pose
 	 * @return std::vector<geometry_msgs::msg::PoseStamped> sampling grasping poses
 	 */
-	std::vector<geometry_msgs::msg::PoseStamped> generateSamplingGraspingPoses(geometry_msgs::msg::Point ball_center);
+	std::vector<geometry_msgs::msg::PoseStamped> generateSamplingGraspingPoses(geometry_msgs::msg::Point ball_center,
+																			   float grasping_distance);
 
 	/**
 	 * @brief compute the grasping pose given the ball center and the theta angle
@@ -94,7 +98,8 @@ public:
 	 * @param theta angle of the grasping pose from the longitudinal axis from origin to the ball center
 	 * @return geometry_msgs::msg::PoseStamped grasping pose
 	 */
-	geometry_msgs::msg::PoseStamped computeGraspingPose(geometry_msgs::msg::Point ball_center, float theta);
+	geometry_msgs::msg::PoseStamped computeGraspingPose(geometry_msgs::msg::Point ball_center, float theta,
+														float grasping_distance);
 
 	/**
 	 * @brief choose the most suitable grasping pose among the sampling poses
@@ -125,6 +130,20 @@ public:
 	 */
 	geometry_msgs::msg::Pose computeDroppingPose(geometry_msgs::msg::Pose aruco_ref_pose,
 												 float delta_distance, float height, float angle);
+
+	/**
+	 * @brief get object radius from its label
+	 * @param label object label
+	 * @return float object radius
+	 */
+	float getObjectRadius(int label);
+
+	/**
+	 * @brief get object grasping distance from its label
+	 * @param label object label
+	 * @return float object grasping distance
+	 */
+	float getObjectGraspingDistance(int label);
 
 	/**
 	 * @brief visualize point in rviz visual tools
@@ -158,14 +177,22 @@ private:
 	const std::string fixed_base_frame;
 	const std::string camera_rgb_frame;
 
-	const float ball_radius = 0.03;		  // ball radius in meters
-	const float grasping_distance = 0.04; // distance from the ball center to grasp pose
-	const float linear_motion = 0.05;	  // linear motion to approach the ball
-	const int n_grasp_sample_poses = 40;  // number of sampling grasping poses
+	const float ball_radius = 0.03;		 // ball radius in meters (only for colored balls)
+	const float linear_motion = 0.05;	 // linear motion to approach the ball
+	const int n_grasp_sample_poses = 40; // number of sampling grasping poses
 
 	const float min_delta_distance = 0.1, max__delta_distance = 0.20; // distance from the base to the dropping pose
-	const float min_height = 0.05, max_height = 0.3;					   // height from the base to the dropping pose
-	const float min_angle = 0.0, max_angle = M_PI / 2.0;			   // pitch orientation of the dropping pose
+	const float min_height = 0.05, max_height = 0.3;				  // height from the base to the dropping pose
+	const float min_angle = 0.0, max_angle = M_PI / 2.0;			  // pitch orientation of the dropping pose
+
+	// map from object label to radius, grasping distance
+	const std::map<int, std::pair<float, float>> label_to_radius_grasp = {
+		{0, {0.05, 0.06}}, // apple: radius, grasping distance
+		{1, {0.03, 0.04}}, // blue: radius, grasping distance
+		{2, {0.03, 0.04}}, // green: radius, grasping distance
+		{3, {0.03, 0.04}}, // red: radius, grasping distance
+		{4, {0.03, 0.04}}  // yellow: radius, grasping distance
+	};
 };
 
 #endif // GRASP_POSE_ESTIMATOR_HPP
