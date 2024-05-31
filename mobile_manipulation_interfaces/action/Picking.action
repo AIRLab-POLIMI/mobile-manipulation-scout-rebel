@@ -1,6 +1,7 @@
 # picking objects: request
 # empty request: search for object to pick and pick them
-# int16 label # optionallt pick only objects of a specific class
+# int16 label # optionally pick only objects of a specific class
+bool grab_and_carry # if true, after object is grasped, it moves to parking pose, otherwise drops it on basket on mobile robot
 ---
 # picking response
 bool objects_remaining # whether there are some objects to pick in reachable range

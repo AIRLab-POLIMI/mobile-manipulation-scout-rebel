@@ -43,8 +43,9 @@ void GraspPoseEstimator::moveToReadyPose() {
  * @brief drop the picked ball in the container put aside to the mobile robot
  */
 void GraspPoseEstimator::dropBallToContainer() {
-	const std::array<double, 6> ready_pose = {150.0 * M_PI / 180.0, 40.0 * M_PI / 180.0, 50.0 * M_PI / 180.0, 0.0, M_PI_2, 0.0};
-	moveit2_api_->robotPlanAndMove(ready_pose);
+	const std::array<double, 6> basket_pose = {-67.0 * M_PI / 180.0, 24.0 * M_PI / 180.0, 57.0 * M_PI / 180.0,
+											  116.0 * M_PI / 180.0, -68.0 * M_PI / 180.0, -143.0 * M_PI / 180.0};
+	moveit2_api_->robotPlanAndMove(basket_pose);
 	moveit2_api_->pump_release();
 	moveit2_api_->pump_off();
 }
@@ -55,23 +56,6 @@ void GraspPoseEstimator::dropBallToContainer() {
  * @return true if the demo was executed successfully until the end, false otherwise
  */
 bool GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr grasp_pose) {
-	/* first version of the demo: reach directly the grasping pose and grip the ball
-	// first open with the gripper for picking up the ball
-	moveit2_api_->pump_release();
-
-	// then move to the grasping pose
-	bool success = moveit2_api_->robotPlanAndMove(grasp_pose);
-
-	// wait for new input if the move to the grasping pose fails
-	if (!success) {
-		RCLCPP_ERROR(logger_, "Failed to move to the grasping pose");
-		moveit2_api_->pump_off();
-		continue;
-	}
-
-	// then grip the ball
-	moveit2_api_->pump_grip();
-	*/
 
 	// Second version of the demo: move to the pre-grasping pose, then to the grasping pose
 	// first compute the pre-grasp pose from the grasping pose

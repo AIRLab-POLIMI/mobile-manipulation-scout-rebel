@@ -12,10 +12,11 @@ using namespace client_demos;
  */
 MobileObjectPicking::MobileObjectPicking(const rclcpp::NodeOptions &node_options)
 	: Node("park_and_interact", node_options),
-	  goal_waypoints(this->get_parameter("waypoints").as_string_array()) {
+	  goal_waypoints(this->get_parameter("waypoints").as_string_array()),
+	  thread_name(this->get_parameter("thread_demo").as_string()) {
+		
 	// Create action client for parking action server
 	this->parking_action_client_ = rclcpp_action::create_client<ParkingAction>(this, "robot_parking_action");
-
 	// create action client for picking action server
 	this->picking_action_client_ = rclcpp_action::create_client<PickingAction>(this, "picking_action");
 	// create action client for dropping action server
@@ -28,9 +29,21 @@ MobileObjectPicking::MobileObjectPicking(const rclcpp::NodeOptions &node_options
 	}
 	RCLCPP_INFO(logger_, "Waypoints: %s", waypoints_str.c_str());
 
-	// Start main thread
-	// NOTE: choose which main function to execute for testing purposes
-	main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_demo, this));
+	// Start main thread: choose which main function to execute
+	if (thread_name == "parking") {
+		main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_parking, this));
+	} else if (thread_name == "picking") {
+		main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_picking, this));
+	} else if (thread_name == "dropping") {
+		main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_dropping, this));
+	} else if (thread_name == "demov1") {
+		main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_demov1, this));
+	} else if (thread_name == "demov2") {
+		main_thread_ = std::thread(std::bind(&MobileObjectPicking::main_thread_demov2, this));
+	} else {
+		RCLCPP_ERROR(logger_, "Unsupported thread name");
+		return;
+	}
 	main_thread_.detach();
 }
 
@@ -77,7 +90,7 @@ void MobileObjectPicking::main_thread_picking(void) {
 	// sleep 1 seconds
 	std::this_thread::sleep_for(std::chrono::seconds(1));
 	// send goal to picking action server
-	auto future_picker_goal = sendPickingGoal();
+	auto future_picker_goal = sendPickingGoal(false);
 
 	// wait for future to complete (goal result to be available)
 	future_picker_goal.wait();
@@ -131,7 +144,7 @@ void MobileObjectPicking::main_thread_dropping(void) {
 }
 
 /**
- * @brief Main thread function that runs the entire demo setup.
+ * @brief Main thread function that runs the entire demov1 setup.
  * 		It sends parking action goals, cycling among the predefined waypoints, and going through all of them
  * 		Once the robot reaches the set waypoint it executes the picking action. If the picking is successful, then the robot
  *      arm parks itself. Then a new parking goal is set, to the pre-defined dropping location. Once the robot arrives
@@ -140,8 +153,8 @@ void MobileObjectPicking::main_thread_dropping(void) {
  *      until all waypoints are visited and all the objects have been collected.
  * 		Each step assumes that the previous step has been completed successfully.
  */
-void MobileObjectPicking::main_thread_demo(void) {
-	RCLCPP_INFO(logger_, "Initializing main_thread_demo");
+void MobileObjectPicking::main_thread_demov1(void) {
+	RCLCPP_INFO(logger_, "Initializing main_thread_demo_v1");
 
 	// declare all futures for the goal handles
 	std::shared_future<GoalHandleParking::SharedPtr> future_park_goal_handle;
@@ -158,7 +171,7 @@ void MobileObjectPicking::main_thread_demo(void) {
 	GoalHandleParking::WrappedResult parking_result;
 	GoalHandlePicking::WrappedResult picker_result;
 	GoalHandleDropping::WrappedResult dropper_result;
-	
+
 	int total_waypoints = goal_waypoints.size();
 	// loop through all waypoints
 	while (current_waypoint_index_ < total_waypoints) {
@@ -182,7 +195,7 @@ void MobileObjectPicking::main_thread_demo(void) {
 		// parking to the current waypoint is successful
 
 		// second: send picking goal to the action server
-		future_picker_goal_handle = sendPickingGoal();
+		future_picker_goal_handle = sendPickingGoal(true);
 		future_picker_goal_handle.wait();
 		picker_goal = future_picker_goal_handle.get();
 		if (!picker_goal) {
@@ -239,10 +252,82 @@ void MobileObjectPicking::main_thread_demo(void) {
 		}
 
 		// dropping was successful, move to the next waypoint
-
 	}
 
-	RCLCPP_INFO(logger_, "Entire demo terminated successfully!");
+	RCLCPP_INFO(logger_, "Entire demov1 terminated successfully!");
+}
+
+/**
+ * @brief Main thread function that runs the entire demov2 setup.
+ * 		It sends parking action goals, cycling among the predefined waypoints, and going through all of them
+ * 		Once the robot reaches the set waypoint it executes the picking action. If the picking is successful, then the robot
+ *      arm drops the object in the basket mounted on top of the mobile robot. It returns to the previous searching position
+ *      and picks another object. This cycle continues until all objects are picked up from the waypoint.
+ *      Once all objects of a waypoint are exhausted, then it moves to the next waypoint,
+ *      until all waypoints are visited and all the objects have been collected.
+ * 		Each step assumes that the previous step has been completed successfully.
+ */
+void MobileObjectPicking::main_thread_demov2(void) {
+	RCLCPP_INFO(logger_, "Initializing main_thread_demo_v2");
+
+	// declare all futures for the goal handles
+	std::shared_future<GoalHandleParking::SharedPtr> future_park_goal_handle;
+	std::shared_future<GoalHandlePicking::SharedPtr> future_picker_goal_handle;
+	GoalHandleParking::SharedPtr parking_goal;
+	GoalHandlePicking::SharedPtr picker_goal;
+
+	// declare all futures for the results
+	std::shared_future<rclcpp_action::ClientGoalHandle<ParkingAction>::WrappedResult> future_park_result;
+	std::shared_future<rclcpp_action::ClientGoalHandle<PickingAction>::WrappedResult> future_picker_result;
+	GoalHandleParking::WrappedResult parking_result;
+	GoalHandlePicking::WrappedResult picker_result;
+
+	int total_waypoints = goal_waypoints.size();
+	// loop through all waypoints
+	while (current_waypoint_index_ < total_waypoints) {
+
+		// first: send parking goal to the action server to park at the current waypoint
+		future_park_goal_handle = sendParkingGoal(goal_waypoints[current_waypoint_index_]);
+		future_park_goal_handle.wait();
+		parking_goal = future_park_goal_handle.get();
+		if (!parking_goal) {
+			RCLCPP_ERROR(logger_, "Parking Goal was rejected by server");
+			return;
+		}
+		future_park_result = parking_action_client_->async_get_result(parking_goal);
+		future_park_result.wait();
+		parking_result = future_park_result.get();
+		if (parking_result.code != rclcpp_action::ResultCode::SUCCEEDED) {
+			RCLCPP_ERROR(logger_, "Parking Goal failed");
+			return;
+		}
+
+		// parking to the current waypoint is successful
+
+		// second: send picking goal to the action server
+		future_picker_goal_handle = sendPickingGoal(false);
+		future_picker_goal_handle.wait();
+		picker_goal = future_picker_goal_handle.get();
+		if (!picker_goal) {
+			RCLCPP_ERROR(logger_, "Picking Goal was rejected by server");
+			return;
+		}
+		future_picker_result = picking_action_client_->async_get_result(picker_goal);
+		future_picker_result.wait();
+		picker_result = future_picker_result.get();
+		if (picker_result.code != rclcpp_action::ResultCode::SUCCEEDED) {
+			RCLCPP_ERROR(logger_, "Picking Goal failed");
+			continue; // try again
+		}
+		// if picking was not successful because no objects were found, then move to the next waypoint
+		if (!this->objects_remaining_) {
+			RCLCPP_INFO(logger_, "All objects picked up, moving to next waypoint");
+			current_waypoint_index_++;
+			continue;
+		}
+	}
+
+	RCLCPP_INFO(logger_, "Entire demov2 terminated successfully!");
 }
 
 /**
@@ -347,9 +432,10 @@ void MobileObjectPicking::parkingResultCallback(const GoalHandleParking::Wrapped
 
 /**
  * @brief Send goal to picking action server and setup callbacks for goal response, feedback and result
+ * @param grab_and_carry flag to indicate if the robot should grab and carry the object, or drop it in the basket
  * @return future for the goal handle, used to keep track of the goal final outcome
  */
-std::shared_future<GoalHandlePicking::SharedPtr> MobileObjectPicking::sendPickingGoal(void) {
+std::shared_future<GoalHandlePicking::SharedPtr> MobileObjectPicking::sendPickingGoal(bool grab_and_carry) {
 	// wait for action server to be up and running
 	while (!picking_action_client_->wait_for_action_server(std::chrono::milliseconds(200))) {
 		RCLCPP_INFO(logger_, "Waiting for picking action server to be up...");
@@ -358,6 +444,7 @@ std::shared_future<GoalHandlePicking::SharedPtr> MobileObjectPicking::sendPickin
 
 	// create goal message to be sent to action server
 	PickingAction::Goal goal_msg = PickingAction::Goal();
+	goal_msg.grab_and_carry = grab_and_carry;
 
 	auto send_goal_options = rclcpp_action::Client<PickingAction>::SendGoalOptions();
 	// setup callbacks for goal response, feedback and result

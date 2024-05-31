@@ -551,11 +551,32 @@ double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_
 			cartesian_trajectory = cartesian_trajectory_temp;
 		}
 
-		if (completed_proportion_temp < 1.0) {
-			move_group->setPlannerId("PTP");
-		}
-
 		attempt++;
+	}
+
+	if (completed_proportion < 0.5) {
+		// attempt again but this time with PTP planner, if the completion proportion is less than 50%
+		attempt = 0;
+		move_group->setPlannerId("PTP");
+		// attempt several times until the completed proportion is maximized or the maximum number of retries is reached
+		while (attempt < n_max_retries && completed_proportion < 1.0) {
+			// linear movement, end effector step size, jump threshold, resulting trajectory, avoid collisions, error codes
+			// this function returns the proportion of the trajectory that was successfully planned
+			// computes cartesian path while taking into account the collisions and not constraining the robot state space
+			// the resulting trajectory is a sequence of waypoints for the end effector to follow
+			double completed_proportion_temp = move_group->computeCartesianPath(pose_waypoints, this->max_step,
+																				this->jump_threshold,
+																				cartesian_trajectory_temp,
+																				true, error_codes);
+			RCLCPP_INFO(LOGGER, "Temp Cartesian linear path: %.2f%% completion", completed_proportion_temp * 100.0);
+			// if linear motion has better completion, update the trajectory and the completion proportion
+			if (completed_proportion_temp > completed_proportion) {
+				completed_proportion = completed_proportion_temp;
+				cartesian_trajectory = cartesian_trajectory_temp;
+			}
+
+			attempt++;
+		}
 	}
 
 	RCLCPP_INFO(LOGGER, "Final Cartesian linear path: %.2f%% achieved", completed_proportion * 100.0);

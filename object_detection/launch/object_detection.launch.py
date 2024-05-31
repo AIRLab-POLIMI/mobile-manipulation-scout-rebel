@@ -84,10 +84,10 @@ def generate_launch_description():
 
     # launch target click node: click on the target on the RGB image window to get the pixel coordinates
     # of the target in the camera frame, for testing purposes
-    ball_detector_node = Node(
-        name="ball_detector",
+    yolov8_detector_node = Node(
+        name="yolov8_detector",
         package='object_detection',
-        executable='ball_detector.py',
+        executable='yolov8_detector.py',
         parameters=[{
             'rgb_topic': LaunchConfiguration('rgb_topic'),
         }],
@@ -100,7 +100,7 @@ def generate_launch_description():
         period=1.0,
         actions=[
             LaunchDescription([
-                ball_detector_node
+                yolov8_detector_node
             ])
         ]
     )

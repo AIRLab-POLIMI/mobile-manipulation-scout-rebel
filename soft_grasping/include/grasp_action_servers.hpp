@@ -109,9 +109,10 @@ public:
 	/**
 	 * @brief execute the object picking action, given the computed grasping pose
 	 * @param grasping_pose the grasping pose to execute
+	 * @param grab_and_carry flag to grab and carry the object, if false it drops on the basket on the mobile robot
 	 * @return bool true if the object is picked up successfully, false otherwise
 	 */
-	bool executeObjectPicking(geometry_msgs::msg::Pose::SharedPtr grasping_pose);
+	bool executeObjectPicking(geometry_msgs::msg::Pose::SharedPtr grasping_pose, bool grab_and_carry);
 
 	/**
 	 * @brief handle goal request for the object dropping action server
@@ -168,9 +169,6 @@ private:
 
 	// last searching waypoint pose
 	std::array<double, 6> last_searched_pose = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-
-	// static dropping pose not used anymore
-	const std::array<double, 6> dropping_pose = {1.0, 0.5, 1.5, 0.0, 1.0, 0.0};
 
 	const int marker_id = 10;
 

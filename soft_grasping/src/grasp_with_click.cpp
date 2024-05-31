@@ -2,9 +2,11 @@
 #include "grasp_with_click.hpp"
 
 /**
- * @brief Constructor for GraspPoseEstimator class
+ * @brief Constructor for GraspWithClick class
  *      subscribes to /object_coords topic to receive ball coordinates from user input click
  *      publishes estimated grasp pose to /grasp_pose topic
+ * @param grasp_pose_estimator shared pointer to GraspPoseEstimator object node
+ * @param ball_perception shared pointer to BallPerception object node
  * @param node_options options for the node, given by the launch file
  */
 GraspWithClick::GraspWithClick(std::shared_ptr<GraspPoseEstimator> grasp_pose_estimator,
@@ -34,7 +36,7 @@ void GraspWithClick::object_coords_callback(const mobile_manipulation_interfaces
 }
 
 /**
- * @brief Main thread function for the GraspPoseEstimator node
+ * @brief Main thread function running continuously, until is terminated
  * 	This thread uses ball pixel coordinates and estimates the grasping pose from the clicked point
  * 	then executes the demo
  */

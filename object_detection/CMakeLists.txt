@@ -40,7 +40,7 @@ install(DIRECTORY
 # Install Python executables
 install(PROGRAMS
 	scripts/dataset_collector.py
-	scripts/ball_detector.py
+	scripts/yolov8_detector.py
 	DESTINATION lib/${PROJECT_NAME}
 )
 

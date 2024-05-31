@@ -114,7 +114,7 @@ void GraspActionServers::execute_picking_callback(const std::shared_ptr<GoalHand
 		// if a valid object is found, execute the grasping action
 		// finally maintain the grip and park the robot arm
 		// if the object is picked up successfully, complete the picking action
-		bool object_picked = executeObjectPicking(grasping_pose);
+		bool object_picked = executeObjectPicking(grasping_pose, goal->grab_and_carry);
 
 		if (!object_picked) {
 			feedback->status = "Failed to complete sequence of movements to pick up the object";
@@ -301,9 +301,11 @@ bool GraspActionServers::findObjectToGrasp(geometry_msgs::msg::Pose::SharedPtr &
 /**
  * @brief execute the object picking action, given the computed grasping pose
  * @param grasping_pose the grasping pose to execute
+ * @param grab_and_carry flag to grab and carry the object, if false it drops on the basket on the mobile robot
  * @return bool true if the object is picked up successfully, false otherwise
  */
-bool GraspActionServers::executeObjectPicking(geometry_msgs::msg::Pose::SharedPtr grasping_pose) {
+bool GraspActionServers::executeObjectPicking(geometry_msgs::msg::Pose::SharedPtr grasping_pose,
+											  bool grab_and_carry) {
 	// move to pre grasp pose
 	// release the gripper
 	// cartesian motion to grasp pose
@@ -318,8 +320,16 @@ bool GraspActionServers::executeObjectPicking(geometry_msgs::msg::Pose::SharedPt
 	// move back to previous looking position
 	moveit2_apis_->robotPlanAndMove(last_searched_pose);
 
-	// move to parked position
-	moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
+	if (grab_and_carry) {
+		// move to parked position and maintain the grip on the object
+		moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
+	} else {
+		// do not carry the object: drop the object in the basket on top of the mobile robot
+		grasp_pose_estimator_->dropBallToContainer();
+		// move back to previous looking position
+		moveit2_apis_->robotPlanAndMove(last_searched_pose);
+	}
+
 	return picking_success;
 }
 
@@ -424,7 +434,7 @@ void GraspActionServers::execute_dropping_callback(const std::shared_ptr<GoalHan
 
 	// move back to parked position
 	moveit2_apis_->robotPlanAndMove(moveit2_apis_->getParkedJointPositions());
-	
+
 	// succeed the goal
 	auto result = std::make_shared<DroppingAction::Result>();
 	goal_handle->succeed(result);

@@ -42,7 +42,7 @@ public:
 				   const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 	/**
-	 * @brief Main thread function for the GraspPoseEstimator node
+	 * @brief Main thread function running continuously, until is terminated
 	 * 	This thread uses ball pixel coordinates and estimates the grasping pose from the clicked point
 	 * 	then executes the demo
 	 */

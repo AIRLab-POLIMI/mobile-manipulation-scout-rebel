@@ -114,6 +114,13 @@ def generate_launch_description():
     with open(nav2_waypoints_file, 'r') as file:
         waypoints_config = yaml.safe_load(file)
 
+    # choose the demo to test
+    thread_demo_arg = DeclareLaunchArgument(
+        name='thread_demo',
+        default_value='demov2',
+        description='Choose the thread to run in mobile object picking demo',
+        choices=["picking", "dropping", "parking", "demov1", "demov2"]
+    )
 
     # declare launch arguments from moveit loader
     args = moveit_loader.declare_arguments()
@@ -178,6 +185,7 @@ def generate_launch_description():
         parameters=[{
             # waypoints names list
             'waypoints': waypoints_config["waypoints"],
+            "thread_demo": LaunchConfiguration('thread_demo'),
         }]
     )
 
@@ -210,6 +218,7 @@ def generate_launch_description():
         camera_rgb_frame_arg,
         camera_depth_frame_arg,
         waypoints_config_arg,
+        thread_demo_arg,
 
         # rviz2_node,
         robot_parking_action_server,

@@ -71,7 +71,7 @@ public:
 	void main_thread_dropping(void);
 
 	/**
-	 * @brief Main thread function that runs the entire demo setup.
+	 * @brief Main thread function that runs the entire demov1 setup.
 	 * 		It sends parking action goals, cycling among the predefined waypoints, and going through all of them
 	 * 		Once the robot reaches the set waypoint it executes the picking action. If the picking is successful, then the robot
 	 *      arm parks itself. Then a new parking goal is set, to the pre-defined dropping location. Once the robot arrives
@@ -80,7 +80,19 @@ public:
 	 *      until all waypoints are visited and all the objects have been collected.
 	 * 		Each step assumes that the previous step has been completed successfully.
 	 */
-	void main_thread_demo(void);
+	void main_thread_demov1(void);
+
+	/**
+	 * @brief Main thread function that runs the entire demov2 setup.
+	 * 		It sends parking action goals, cycling among the predefined waypoints, and going through all of them
+	 * 		Once the robot reaches the set waypoint it executes the picking action. If the picking is successful, then the robot
+	 *      arm drops the object in the basket mounted on top of the mobile robot. It returns to the previous searching position
+	 *      and picks another object. This cycle continues until all objects are picked up from the waypoint.
+	 *      Once all objects of a waypoint are exhausted, then it moves to the next waypoint,
+	 *      until all waypoints are visited and all the objects have been collected.
+	 * 		Each step assumes that the previous step has been completed successfully.
+	 */
+	void main_thread_demov2(void);
 
 	/**
 	 * @brief Send goal to parking action server and setup callbacks for goal response, feedback and result
@@ -111,9 +123,10 @@ public:
 
 	/**
 	 * @brief Send goal to picking action server and setup callbacks for goal response, feedback and result
+	 * @param grab_and_carry flag to indicate if the robot should grab and carry the object, or drop it in the basket
 	 * @return future for the goal handle, used to keep track of the goal final outcome
 	 */
-	std::shared_future<GoalHandlePicking::SharedPtr> sendPickingGoal(void);
+	std::shared_future<GoalHandlePicking::SharedPtr> sendPickingGoal(bool grab_and_carry);
 
 	/**
 	 * @brief Callback function for receiving goal response from picking action server
@@ -183,6 +196,7 @@ private:
 
 	// continuous running thread
 	std::thread main_thread_;
+	const std::string thread_name;
 };
 
 } // namespace client_demos

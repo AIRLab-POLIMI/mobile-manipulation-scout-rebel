@@ -35,7 +35,7 @@ import os
 import numpy as np
 
 
-class BallDetector(Node):
+class YOLOv8Detector(Node):
 
     TEXT_COLOR = (255, 255, 255)  # White
     COLOR_MAPPING = { # BGR color mapping
@@ -45,9 +45,17 @@ class BallDetector(Node):
         3: (0, 0, 255),  # red
         4: (0, 250, 255),  # yellow
     }
+    # class mapping = dictionary from class index to class name
+    class_mapping = {
+            0: "apple",
+            1: "blue_ball",
+            2: "green_ball",
+            3: "red_ball",
+            4: "yellow_ball"
+        }
 
     def __init__(self):
-        super().__init__('ball_detector_node')
+        super().__init__('yolov8_detector_node')
 
         self.initialize_parameters()
 
@@ -88,14 +96,6 @@ class BallDetector(Node):
         self.cv_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding="rgb8")
 
     def load_model_inference(self):
-        # class mapping = dictionary from class index to class name
-        self.class_mapping = {
-            0: "apple",
-            1: "blue_ball",
-            2: "green_ball",
-            3: "red_ball",
-            4: "yellow_ball"
-        }
 
         # print the tensorflow version and the available GPU devices
         self.get_logger().info(f"Tensorflow version: {tf.__version__}")
@@ -250,7 +250,7 @@ class BallDetector(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = BallDetector()
+    node = YOLOv8Detector()
     rclpy.spin(node)
 
     node.destroy_node()
