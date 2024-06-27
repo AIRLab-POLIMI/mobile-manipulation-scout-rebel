@@ -33,9 +33,10 @@ find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
 find_package(pcl_msgs REQUIRED)
+find_package(pcl_conversions REQUIRED)
 
 # ----------------------- C++ -----------------------
-include_directories(include)
+include_directories(include ${PCL_INCLUDE_DIRS})
 
 # ---------------------------------------------------------------
 # DEMO 1: Grasp with input click (click on the object to grasp)
@@ -51,7 +52,7 @@ ament_target_dependencies(grasp_with_input_click
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
 	std_msgs geometry_msgs 
 	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_api
-	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
+	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs pcl_conversions)
 
 # ---------------------------------------------------------------
 # DEMO 2: Grasp autonomously with object detection pipeline
@@ -66,7 +67,7 @@ ament_target_dependencies(grasp_autonomous
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
 	std_msgs geometry_msgs 
 	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_api
-	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
+	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs pcl_conversions)
 
 
 # ---------------------------------------------------------------
@@ -82,7 +83,7 @@ ament_target_dependencies(grasp_action_servers
 	rclcpp pluginlib moveit_core moveit_kinematics moveit_visual_tools moveit_ros_planning_interface
 	std_msgs geometry_msgs 
 	igus_rebel_gripper_controller mobile_manipulation_interfaces moveit2_api aruco_interfaces
-	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs)
+	cv_bridge image_transport OpenCV Eigen3 PCL pcl_msgs pcl_conversions)
 
 # ---------------------------------------------------------------
 
@@ -114,5 +115,5 @@ install(DIRECTORY
 	launch rviz config
 	DESTINATION share/${PROJECT_NAME}
 )
-
+ament_export_include_directories(include)
 ament_package()

@@ -68,15 +68,15 @@ bool GraspPoseEstimator::executeDemo(geometry_msgs::msg::PoseStamped::SharedPtr 
 	pre_grasp_pose_stamped->header.stamp = this->now();
 	pre_grasp_pose_stamped->pose = *pre_grasp_pose;
 
+	// open the gripper for picking up the ball
+	moveit2_api_->pump_release();
+
 	// then move to the pre-grasp pose
 	bool success = moveit2_api_->robotPlanAndMove(pre_grasp_pose_stamped);
 	if (!success) {
 		RCLCPP_ERROR(logger_, "Failed to move to the pre-grasping pose");
 		return false;
 	}
-
-	// open the gripper for picking up the ball
-	moveit2_api_->pump_release();
 
 	// linear motion to the grasping pose
 	geometry_msgs::msg::Pose::SharedPtr pre_grasp_pose_ptr = std::make_shared<geometry_msgs::msg::Pose>(*pre_grasp_pose);

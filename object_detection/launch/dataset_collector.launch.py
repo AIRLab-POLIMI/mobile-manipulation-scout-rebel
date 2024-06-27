@@ -55,6 +55,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(cam_feed_launch_file),
         launch_arguments={
             "enable_color": "true",
+            "camera_namespace": ""
         }.items(),
     )
 

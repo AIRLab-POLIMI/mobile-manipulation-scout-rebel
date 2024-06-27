@@ -150,6 +150,7 @@ def generate_launch_description():
         launch_arguments={
             "pointcloud.enable": "true",
             "enable_color": "true",
+            "camera_namespace": ""
         }.items(),
     )
 

@@ -85,7 +85,7 @@ void GraspActionServers::execute_picking_callback(const std::shared_ptr<GoalHand
 	std::shared_ptr<geometry_msgs::msg::Pose> grasping_pose;
 
 	// find an object in the reachable range to grasp, and check if there exists a valid grasping pose
-	bool valid_object = lookAroundFor(getSearchingWaypoints(false),
+	bool valid_object = lookAroundFor(getSearchingWaypoints(true),
 									  std::bind(&GraspActionServers::findObjectToGrasp, this, std::placeholders::_1),
 									  grasping_pose);
 
@@ -159,7 +159,7 @@ std::vector<std::array<double, 6>> GraspActionServers::getSearchingWaypoints(boo
 
 	// first layer of waypoints: camera facing forward --> suitable for searching distant aruco markers
 	for (float i = range_min; i <= range_max; i += 0.2) {
-		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 85.0 * M_PI / 180.0, 0.0, 90.0 * M_PI / 180.0, 0.0};
+		std::array<double, 6> pos = {i, -60.0 * M_PI / 180.0, 85.0 * M_PI / 180.0, 0.0, 75.0 * M_PI / 180.0, 0.0};
 		waypoints.push_back(pos);
 	}
 

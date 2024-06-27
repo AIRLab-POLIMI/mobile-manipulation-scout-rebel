@@ -79,6 +79,7 @@ def generate_launch_description():
             "align_depth.enable": "true",
             "enable_color": "true",
             "enable_depth": "true",
+            "camera_namespace": ""
         }.items(),
     )
 

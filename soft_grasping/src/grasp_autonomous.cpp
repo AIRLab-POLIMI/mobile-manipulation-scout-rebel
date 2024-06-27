@@ -35,14 +35,23 @@ void GraspAutonomous::object_detections_callback(const mobile_manipulation_inter
 	// for each object detected, save the bounding box and class label with confidence score
 	for (unsigned int i = 0; i < msg->labels.size(); i++) {
 		BallPerception::ObjectDetection object_detection;
-		object_detection.label = msg->labels[i];
-		object_detection.score = msg->confidences[i];
-		object_detection.x_min = static_cast<uint16_t>(msg->bounding_boxes[i * 4 + 0]);
-		object_detection.y_min = static_cast<uint16_t>(msg->bounding_boxes[i * 4 + 1]);
-		object_detection.width = static_cast<uint16_t>(msg->bounding_boxes[i * 4 + 2]);
-		object_detection.height = static_cast<uint16_t>(msg->bounding_boxes[i * 4 + 3]);
-		object_detection.timestamp = msg->header.stamp;
-		detected.push_back(object_detection);
+
+		float x_center = msg->bounding_boxes[i * 4 + 0] + msg->bounding_boxes[i * 4 + 2] / 2.0;
+		float y_center = msg->bounding_boxes[i * 4 + 1] + msg->bounding_boxes[i * 4 + 3] / 2.0;
+		float margin_x = 0.075 * 640;
+		float margin_y = 0.075 * 480;
+		// restrict the object detections to the center of the camera view
+		// to prevent the usage of detections close to the borders of the camera view
+		if (x_center >= margin_x && x_center <= 640 - margin_x && y_center >= margin_y && y_center <= 480 - margin_y) {
+			object_detection.label = msg->labels[i];
+			object_detection.score = msg->confidences[i];
+			object_detection.x_min = static_cast<uint16_t>(msg->bounding_boxes[i * 4 + 0]);
+			object_detection.y_min = static_cast<uint16_t>(msg->bounding_boxes[i * 4 + 1]);
+			object_detection.width = static_cast<uint16_t>(msg->bounding_boxes[i * 4 + 2]);
+			object_detection.height = static_cast<uint16_t>(msg->bounding_boxes[i * 4 + 3]);
+			object_detection.timestamp = msg->header.stamp;
+			detected.push_back(object_detection);
+		}
 	}
 
 	{

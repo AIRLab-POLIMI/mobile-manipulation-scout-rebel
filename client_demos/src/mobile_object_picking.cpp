@@ -14,7 +14,7 @@ MobileObjectPicking::MobileObjectPicking(const rclcpp::NodeOptions &node_options
 	: Node("park_and_interact", node_options),
 	  goal_waypoints(this->get_parameter("waypoints").as_string_array()),
 	  thread_name(this->get_parameter("thread_demo").as_string()) {
-		
+
 	// Create action client for parking action server
 	this->parking_action_client_ = rclcpp_action::create_client<ParkingAction>(this, "robot_parking_action");
 	// create action client for picking action server
@@ -89,23 +89,28 @@ void MobileObjectPicking::main_thread_picking(void) {
 	RCLCPP_INFO(logger_, "Initializing main_thread_picking");
 	// sleep 1 seconds
 	std::this_thread::sleep_for(std::chrono::seconds(1));
-	// send goal to picking action server
-	auto future_picker_goal = sendPickingGoal(false);
+	int iteration = 0;
+	while (iteration < 10) {
+		// send goal to picking action server
+		auto future_picker_goal = sendPickingGoal(false);
 
-	// wait for future to complete (goal result to be available)
-	future_picker_goal.wait();
-	auto goal_handle = future_picker_goal.get();
-	if (!goal_handle) {
-		RCLCPP_ERROR(logger_, "Goal was rejected by server");
-		return;
-	}
+		// wait for future to complete (goal result to be available)
+		future_picker_goal.wait();
+		auto goal_handle = future_picker_goal.get();
+		if (!goal_handle) {
+			RCLCPP_ERROR(logger_, "Goal was rejected by server");
+			return;
+		}
 
-	auto result_future = picking_action_client_->async_get_result(goal_handle);
-	result_future.wait();
-	auto result = result_future.get();
-	if (result.code != rclcpp_action::ResultCode::SUCCEEDED) {
-		RCLCPP_ERROR(logger_, "Goal failed");
-		return;
+		auto result_future = picking_action_client_->async_get_result(goal_handle);
+		result_future.wait();
+		auto result = result_future.get();
+		if (result.code != rclcpp_action::ResultCode::SUCCEEDED) {
+			RCLCPP_ERROR(logger_, "Goal failed");
+			return;
+		}
+		iteration++;
+		std::this_thread::sleep_for(std::chrono::seconds(10));
 	}
 
 	RCLCPP_INFO(logger_, "Picking demo terminated successfully");
