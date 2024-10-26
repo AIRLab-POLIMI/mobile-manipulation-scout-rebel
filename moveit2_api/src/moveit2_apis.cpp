@@ -8,7 +8,11 @@
 MoveIt2APIs::MoveIt2APIs(const rclcpp::NodeOptions &node_options)
 	: Node("moveit2_apis_node", node_options),
 	  // loads the camera frame from the aruco detector config file
-	  camera_frame_name(get_parameter("camera_frame").as_string()) {
+	  camera_frame_name("camera_frame") {
+
+	// load base = true if the robotic arm is mounted on the mobile robot base, false if it's mounted on a table
+	camera_frame_name = this->declare_parameter("camera_frame", camera_frame_name);
+	load_base_arg = this->declare_parameter<bool>("load_base", load_base_arg);
 
 	if (this->camera_frame_name != std::string()) {
 		RCLCPP_INFO(LOGGER, "Value of camera frame: %s", this->camera_frame_name.c_str());
@@ -16,8 +20,7 @@ MoveIt2APIs::MoveIt2APIs(const rclcpp::NodeOptions &node_options)
 		RCLCPP_ERROR(LOGGER, "Failed to get camera frame parameter from config file");
 	}
 
-	// load base = true if the robotic arm is mounted on the mobile robot base, false if it's mounted on a table
-	load_base_arg = this->get_parameter("load_base").as_bool();
+	
 
 	tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
 	tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -125,6 +128,8 @@ void MoveIt2APIs::loadPlanner(const moveit::core::RobotModelPtr &robot_model) {
 
 	std::string planner_plugin_name;
 
+	planner_plugin_name = moveit2_node_->declare_parameter("planning_plugin", planner_plugin_name);
+
 	bool loaded = moveit2_node_->get_parameter("planning_plugin", planner_plugin_name);
 
 	// We will get the name of planning plugin we want to load
@@ -187,7 +192,7 @@ void MoveIt2APIs::initRvizVisualTools() {
 	// RViz provides many types of markers, in this demo we will use text, cylinders, and spheres
 	Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
 	text_pose.translation().z() = 1.0;
-	visual_tools->publishText(text_pose, "MoveIt2 C++ APIs", rvt::WHITE, rvt::XXLARGE);
+	// visual_tools->publishText(text_pose, "MoveIt2 C++ APIs", rvt::WHITE, rvt::XXLARGE);
 
 	// Batch publishing is used to reduce the number of messages being sent to RViz for large visualizations
 	visual_tools->trigger();
@@ -434,20 +439,27 @@ std::vector<geometry_msgs::msg::Pose> MoveIt2APIs::computeLinearWaypoints(double
  * @param target_pose the cartesian pose target with reference frame associated
  * @return result of the movement
  */
-bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
-	RCLCPP_INFO(LOGGER, "Planning and moving to target pose");
+bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr target_pose, std::string target, bool compensation) {
+	RCLCPP_INFO(LOGGER, "Planning and moving to %s pose", target.c_str());
 
-	// apply offset compensation to the cartesian space target pose
-	geometry_msgs::msg::PoseStamped::UniquePtr compensated_target_pose = compensateTargetPose(*target_pose);
+	geometry_msgs::msg::PoseStamped::UniquePtr compensated_target_pose;
+	if (compensation){
+		// apply offset compensation to the cartesian space target pose
+		compensated_target_pose = compensateTargetPose(*target_pose);
+	}
+	else{
+		// Assumping that that target_pose is the only owner 
+		compensated_target_pose = std::make_unique<geometry_msgs::msg::PoseStamped>(*target_pose);
+	}
 
 	if (!checkIKSolution(compensated_target_pose->pose)) {
-		RCLCPP_ERROR(LOGGER, "No valid IK solution for the target pose");
+		RCLCPP_ERROR(LOGGER, "No valid IK solution for the %s pose", target.c_str());
 		//return false;
 	}
 
 	// publish a coordinate axis corresponding to the pose with rviz visual tools
 	visual_tools->setBaseFrame(fixed_base_frame);
-	visual_tools->publishAxisLabeled(compensated_target_pose->pose, "target");
+	visual_tools->publishAxisLabeled(compensated_target_pose->pose, target);
 	visual_tools->trigger();
 
 	// set the target pose
@@ -492,8 +504,8 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
 	// visualizing the trajectory
 	joint_model_group = move_group->getCurrentState()->getJointModelGroup(PLANNING_GROUP);
 	auto link_eef = move_group->getCurrentState()->getLinkModel(end_effector_link);
-	visual_tools->setBaseFrame(plan_motion.trajectory.multi_dof_joint_trajectory.header.frame_id);
-	visual_tools->publishTrajectoryLine(plan_motion.trajectory, link_eef, joint_model_group);
+	visual_tools->setBaseFrame(plan_motion.trajectory_.multi_dof_joint_trajectory.header.frame_id);
+	visual_tools->publishTrajectoryLine(plan_motion.trajectory_, link_eef, joint_model_group);
 	visual_tools->trigger();
 
 	
@@ -511,9 +523,9 @@ bool MoveIt2APIs::robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr ta
  * @param pose_waypoints the sequence of waypoints to follow for the end effector
  * @return percentage of completion of the linear sequence of waypoints
  */
-double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_waypoints) {
+double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_waypoints, std::string target) {
 
-	RCLCPP_INFO(LOGGER, "Planning and moving to target pose with linear path");
+	RCLCPP_INFO(LOGGER, "Planning and moving to %s pose with linear path", target.c_str());
 
 	// set the target pose
 	move_group->setStartState(*move_group->getCurrentState());
@@ -602,12 +614,81 @@ double MoveIt2APIs::robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_
 	}
 }
 
+
+
+
+/**
+ * @brief Convert joint space goal into cartesian position
+ * @param joint_space_goal the joint space goal, sequence of 6 joint values expressed in radians
+ * @param goal_pose_tf2 a goal pose in the cartesian space
+ * @return true if plan and movement were successful, false otherwise
+ */
+Eigen::Isometry3d MoveIt2APIs::fromJointSpaceGoalToCartesianPose(std::array<double, 6> joint_space_goal) {
+	// Setup a joint space goal
+	moveit::core::RobotState goal_state(*move_group->getCurrentState());
+	std::vector<double> joint_space_goal_vector(joint_space_goal.begin(), joint_space_goal.end());
+	goal_state.setJointGroupPositions(joint_model_group, joint_space_goal_vector);
+
+	move_group->setStartState(*move_group->getCurrentState());
+	move_group->setGoalPositionTolerance(position_tolerance);		// meters ~ 5 mm
+	move_group->setGoalOrientationTolerance(orientation_tolerance); // radians ~ 5 degrees
+	move_group->setPlanningTime(timeout_seconds);
+	// move_group->setPlanningPipelineId("ompl");
+	// move_group->setPlannerId("RRTConnectkConfigDefault");
+	move_group->setPlanningPipelineId("stomp");
+	move_group->setPlannerId("STOMP");
+	//  optionally limit accelerations and velocity scaling
+	move_group->setMaxVelocityScalingFactor(max_velocity_scaling_joint_space);
+	move_group->setMaxAccelerationScalingFactor(max_acceleration_scaling);
+
+	bool valid_motion = move_group->setJointValueTarget(goal_state);
+	if (!valid_motion) {
+		throw std::runtime_error("Target joints outside their physical limits");
+	}
+
+	// gets end effector link with respect to global frame of reference (root frame)
+	const Eigen::Isometry3d goal_pose = goal_state.getGlobalLinkTransform(end_effector_link);
+	Eigen::Isometry3d goal_pose_tf2;
+
+	// lookup transform from global frame of reference (root frame) to fixed base frame
+	geometry_msgs::msg::TransformStamped tf_base_footprint_msg;
+	try {
+		// lookup transform from root base frame (base_footprint when load_base = true) to fixed base frame (igus rebel base link)
+		tf_base_footprint_msg = tf_buffer_->lookupTransform(fixed_base_frame, root_base_frame, tf2::TimePointZero);
+	} catch (const tf2::TransformException &ex) {
+		RCLCPP_ERROR(LOGGER, "%s", ex.what());
+		throw std::runtime_error(ex.what());
+	}
+
+	// convert global link transform obtained to the fixed base frame of reference
+	tf2::doTransform(goal_pose, goal_pose_tf2, tf_base_footprint_msg); // in, out, transform
+
+	// RCLCPP_ERROR(LOGGER, "Translation: [%f, %f, %f], Rotation (Quaternion): [%f, %f, %f, %f]", 
+	// 	goal_pose_tf2.translation().x(), 
+	// 	goal_pose_tf2.translation().y(), 
+	// 	goal_pose_tf2.translation().z(), 
+	// 	Eigen::Quaterniond(goal_pose_tf2.rotation()).x(), 
+	// 	Eigen::Quaterniond(goal_pose_tf2.rotation()).y(), 
+	// 	Eigen::Quaterniond(goal_pose_tf2.rotation()).z(), 
+	// 	Eigen::Quaterniond(goal_pose_tf2.rotation()).w());
+
+	return goal_pose_tf2;
+}
+
+
+
+
+
+
+
+
+
 /**
  * @brief Plan and move the robot to the joint space goal
  * @param joint_space_goal the joint space goal, sequence of 6 joint values expressed in radians
  * @return true if plan and movement were successful, false otherwise
  */
-bool MoveIt2APIs::robotPlanAndMove(std::array<double, 6> joint_space_goal) {
+bool MoveIt2APIs::robotPlanAndMove(std::array<double, 6> joint_space_goal, std::string target) {
 	// Setup a joint space goal
 	moveit::core::RobotState goal_state(*move_group->getCurrentState());
 	std::vector<double> joint_space_goal_vector(joint_space_goal.begin(), joint_space_goal.end());
@@ -651,7 +732,7 @@ bool MoveIt2APIs::robotPlanAndMove(std::array<double, 6> joint_space_goal) {
 	// use rviz visual tools to publish a coordinate axis corresponding to the goal pose defined
 	joint_model_group = move_group->getCurrentState()->getJointModelGroup(PLANNING_GROUP);
 	visual_tools->setBaseFrame(fixed_base_frame);
-	visual_tools->publishAxisLabeled(goal_pose_tf2, "search_pose");
+	visual_tools->publishAxisLabeled(goal_pose_tf2, target);
 	visual_tools->trigger();
 
 	// make several attempts at planning until a valid motion is found or the maximum number of retries is reached
@@ -667,14 +748,14 @@ bool MoveIt2APIs::robotPlanAndMove(std::array<double, 6> joint_space_goal) {
 	}
 
 	// visualizing the trajectory
-	RCLCPP_INFO(LOGGER, "Planning to the searching position = %s", moveit::core::error_code_to_string(response).c_str());
+	RCLCPP_INFO(LOGGER, "Planning to the %s pose = %s", target.c_str(), moveit::core::error_code_to_string(response).c_str());
 
 	visual_tools->setBaseFrame(root_base_frame);
-	visual_tools->publishTrajectoryLine(search_plan.trajectory, goal_state.getLinkModel(end_effector_link), joint_model_group);
+	visual_tools->publishTrajectoryLine(search_plan.trajectory_, goal_state.getLinkModel(end_effector_link), joint_model_group);
 	visual_tools->trigger();
 
 	if (bool(response)) {
-		RCLCPP_INFO(LOGGER, "Moving the robot to searching pose with joint space goal");
+		RCLCPP_INFO(LOGGER, "Moving the robot to %s pose with joint space goal", target.c_str());
 		move_group->execute(search_plan);
 	} else {
 		RCLCPP_ERROR(LOGGER, "Could not compute plan successfully");

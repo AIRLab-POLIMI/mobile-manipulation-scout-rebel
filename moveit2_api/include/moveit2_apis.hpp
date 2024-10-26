@@ -45,6 +45,10 @@ public:
 	// planning and frame transformations are done in the fixed base frame
 	const std::string fixed_base_frame = "igus_rebel_base_link";
 
+	// rviz visual tools
+	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools;
+
+
 private:
 	const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit2::APIs");
 	const std::string PLANNING_GROUP = "rebel_arm";
@@ -54,7 +58,7 @@ private:
 	std::string root_base_frame; // base footprint or map
 
 	// the source frame of the aruco markers is the camera frame
-	const std::string camera_frame_name;
+	std::string camera_frame_name;
 
 	// load base arg
 	bool load_base_arg;
@@ -92,9 +96,6 @@ private:
 	moveit::core::RobotStatePtr robot_state;
 	moveit::core::RobotModelPtr robot_model;
 	kinematics::KinematicsBaseConstPtr kinematics_solver;
-
-	// rviz visual tools
-	std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools;
 
 	// this node
 	rclcpp::Node::SharedPtr moveit2_node_;
@@ -196,25 +197,33 @@ public:
 	std::vector<geometry_msgs::msg::Pose> computeLinearWaypoints(double x_length, double y_length, double z_length);
 
 	/**
+	 * @brief Convert joint space goal into cartesian position
+	 * @param joint_space_goal the joint space goal, sequence of 6 joint values expressed in radians
+	 * @param goal_pose_tf2 a goal pose in the cartesian space
+	 * @return true if plan and movement were successful, false otherwise
+	 */
+	Eigen::Isometry3d fromJointSpaceGoalToCartesianPose(std::array<double, 6> joint_space_goal);
+
+	/**
 	 * @brief Plan and move the robotic arm to the target pose
 	 * @param target_pose the target pose for the robotic arm to reach
 	 * @return true if the movement and planning was successful, false otherwise
 	 */
-	bool robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr target_pose);
+	bool robotPlanAndMove(geometry_msgs::msg::PoseStamped::SharedPtr target_pose, std::string target, bool compensation=true);
 
 	/**
 	 * @brief Plan and move the robot to the sequence of poses, in cartesian space
 	 * @param pose_waypoints the sequence of waypoints to follow for the end effector
 	 * @return percentage of completion of the linear sequence of waypoints
 	 */
-	double robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_waypoints);
+	double robotPlanAndMove(std::vector<geometry_msgs::msg::Pose> pose_waypoints, std::string target);
 
 	/**
 	 * @brief Plan and move the robot to the joint space goal
 	 * @param joint_space_goal the joint space goal, sequence of 6 joint values expressed in radians
 	 * @return true if plan and movement were successful, false otherwise
 	 */
-	bool robotPlanAndMove(std::array<double, 6> joint_space_goal);
+	bool robotPlanAndMove(std::array<double, 6> joint_space_goal, std::string target);
 
 	/**
 	 * @brief add position and orientation constraints to the planning, so to produce a linear path
